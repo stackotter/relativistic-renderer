@@ -6,6 +6,7 @@ struct ContentView: View {
     var body: some View {
         if let error {
             Text(error)
+                .font(.system(size: 12).monospaced())
         } else {
             MetalView(error: $error) {
                 try RenderCoordinator<RelativisticRenderer>.create()

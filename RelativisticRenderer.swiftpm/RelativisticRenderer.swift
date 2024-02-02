@@ -45,25 +45,52 @@ struct RelativisticRenderer: Renderer {
                 
                 constexpr sampler textureSampler (mag_filter::linear, min_filter::linear);
                 
+                float4 sampleCheckerBoard(float2 uv, float scaleFactor) {
+                    if (length(uv) < 0.035) {
+                        return float4(1, 0.75, 0, 1);
+                    }
+                    if (((int)floor(uv.x * scaleFactor) % 2 == 0) == ((int)floor(uv.y * scaleFactor) % 2 == 0)) {
+                        return float4(1, 1, 1, 1);
+                    } else {
+                        return float4(0, 0, 0, 1);
+                    }
+                }
+                
                 kernel void computeFunction(texture2d<float, access::sample> inTexture [[texture(0)]],
                                        texture2d<float, access::write> outTexture [[texture(1)]],
                                        uint2 gid [[thread_position_in_grid]]) {
-                    float2 uv = float2(
-                        (float)gid.x / (float)inTexture.get_width(),
-                        (float)gid.y / (float)inTexture.get_height()
+                    float textureWidth = (float)inTexture.get_width();
+                    float textureHeight = (float)inTexture.get_height();
+                    
+                    // A ray from the camera representing the direction that light must come from to
+                    // contribute to the current pixel (we trace this ray backwards).
+                    float3 cartesianRay = float3(
+                        ((float)gid.x - textureWidth/2) / textureWidth,
+                        ((float)gid.y - textureHeight/2) / textureWidth,
+                        1
                     );
-                    uv -= float2(0.5, 0.5);
-                    float mag = sqrt(uv.x*uv.x + uv.y*uv.y);
-                    float4 color;
+
+                    // yaw, pitch
+                    float2 polarRayDirection = float2(
+                        atan2(cartesianRay.x, cartesianRay.z),
+                        atan2(cartesianRay.y, sqrt(cartesianRay.x*cartesianRay.x + 1))
+                    );
+                
+                    // The position (relative to camera) of the mass which is acting as a gravitational lens.
+                    float3 massPos = float3(0, 0, 1);
+
+                    // We calculate the angle of deflection based on the impact parameter and a constant.
+                    float3 unitRay = cartesianRay/length(cartesianRay);
+                    float k = 1;
+                    float impactParam = length(massPos - dot(unitRay, massPos)*unitRay);
+                    float angleOfDeflection = k / impactParam;
+                
+                    // The deflection occurs in the plane containing the original ray and the mass. Note that
+                    // this plane contains the origin.
+                    float3 deflectionPlaneNormal = cross(unitRay, massPos);
                     
-                        uv *= log(mag);
-                        uv += float2(0.5, 0.5);
-                    
-                        if (((int)floor(uv.x / 0.01) % 2 == 0) == ((int)floor(uv.y / 0.01) % 2 == 0)) {
-                            color = float4(1, 1, 1, 1);
-                        } else {
-                            color = float4(0, 0, 0, 1);
-                        }
+                    float4 color = float4(float3(1, 1, 1) * clamp(abs(angleOfDeflection/100), 0.0, 1.0), 1);
+                    //float4 color = sampleCheckerBoard(cartesianRay.xy, 100);
                     outTexture.write(color, gid);
                 }
                 
