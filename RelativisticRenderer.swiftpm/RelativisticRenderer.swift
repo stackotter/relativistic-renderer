@@ -43,10 +43,28 @@ struct RelativisticRenderer: Renderer {
                     return float4(1, 0, 0, 1);
                 }
                 
-                kernel void computeFunction(texture2d<float, access::read> inTexture [[texture(0)]],
+                constexpr sampler textureSampler (mag_filter::linear, min_filter::linear);
+                
+                kernel void computeFunction(texture2d<float, access::sample> inTexture [[texture(0)]],
                                        texture2d<float, access::write> outTexture [[texture(1)]],
                                        uint2 gid [[thread_position_in_grid]]) {
-                    outTexture.write(inTexture.read(gid), gid);
+                    float2 uv = float2(
+                        (float)gid.x / (float)inTexture.get_width(),
+                        (float)gid.y / (float)inTexture.get_height()
+                    );
+                    uv -= float2(0.5, 0.5);
+                    float mag = sqrt(uv.x*uv.x + uv.y*uv.y);
+                    float4 color;
+                    
+                        uv *= log(mag);
+                        uv += float2(0.5, 0.5);
+                    
+                        if (((int)floor(uv.x / 0.01) % 2 == 0) == ((int)floor(uv.y / 0.01) % 2 == 0)) {
+                            color = float4(1, 1, 1, 1);
+                        } else {
+                            color = float4(0, 0, 0, 1);
+                        }
+                    outTexture.write(color, gid);
                 }
                 
                 typedef struct {
@@ -66,8 +84,6 @@ struct RelativisticRenderer: Renderer {
                 vertex BlitVertex blitVertexFunction(uint vertexId [[vertex_id]]) {
                     return blitVertices[vertexId];
                 }
-                
-                constexpr sampler textureSampler (mag_filter::linear, min_filter::linear);
 
                 fragment float4 blitFragmentFunction(BlitVertex in [[stage_in]],
                                                  texture2d<float, access::sample> inTexture [[texture(0)]]) {
@@ -136,32 +152,7 @@ struct RelativisticRenderer: Renderer {
     }
     
     mutating func render(view: MTKView, device: MTLDevice, renderPassDescriptor: MTLRenderPassDescriptor, drawable: MTLDrawable, commandBuffer: MTLCommandBuffer) throws {
-        let backgroundTexture: any MTLTexture
-        let computeOutputTexture: any MTLTexture
-        if let textureA = self.backgroundTexture, let textureB = self.computeOutputTexture, textureA.width == textureB.width, textureA.height == textureB.height, textureB.width == Int(view.drawableSize.width), textureB.height == Int(view.drawableSize.height) {
-            backgroundTexture = textureA
-            computeOutputTexture = textureB
-        } else {
-            let textureDescriptor = MTLTextureDescriptor()
-            textureDescriptor.width = Int(view.drawableSize.width)
-            textureDescriptor.height = Int(view.drawableSize.height)
-            textureDescriptor.pixelFormat = .bgra8Unorm
-            textureDescriptor.usage = [.shaderRead, .renderTarget]
-            
-            guard let textureA = device.makeTexture(descriptor: textureDescriptor) else {
-                throw SimpleError("Failed to make background render target")
-            }
-            self.backgroundTexture = textureA
-            backgroundTexture = textureA
-            
-            textureDescriptor.usage = [.shaderRead, .shaderWrite]
-            guard let textureB = device.makeTexture(descriptor: textureDescriptor) else {
-                throw SimpleError("Failed to make compute shader output texture")
-            }
-            self.computeOutputTexture = textureB
-            computeOutputTexture = textureB
-            print("Remaking textures")
-        }
+        let (backgroundTexture, computeOutputTexture) = try updateTextures(device, view)
         
         let backgroundRenderPassDescriptor = MTLRenderPassDescriptor()
         backgroundRenderPassDescriptor.colorAttachments[0].texture = backgroundTexture
@@ -202,6 +193,38 @@ struct RelativisticRenderer: Renderer {
         
         commandBuffer.present(drawable)
         commandBuffer.commit()
+    }
+    
+    mutating func updateTextures(_ device: MTLDevice, _ view: MTKView) throws -> (backgroundTexture: MTLTexture, computeOutputTexture: MTLTexture) {
+        guard
+            let backgroundTexture = self.backgroundTexture,
+            let computeOutputTexture = self.computeOutputTexture,
+            backgroundTexture.width == computeOutputTexture.width,
+            backgroundTexture.height == computeOutputTexture.height,
+            computeOutputTexture.width == Int(view.drawableSize.width),
+            computeOutputTexture.height == Int(view.drawableSize.height)
+        else {
+            let textureDescriptor = MTLTextureDescriptor()
+            textureDescriptor.width = Int(view.drawableSize.width)
+            textureDescriptor.height = Int(view.drawableSize.height)
+            textureDescriptor.pixelFormat = .bgra8Unorm
+            textureDescriptor.usage = [.shaderRead, .renderTarget]
+            
+            guard let backgroundTexture = device.makeTexture(descriptor: textureDescriptor) else {
+                throw SimpleError("Failed to make background render target")
+            }
+            self.backgroundTexture = backgroundTexture
+            
+            textureDescriptor.usage = [.shaderRead, .shaderWrite]
+            guard let computeOutputTexture = device.makeTexture(descriptor: textureDescriptor) else {
+                throw SimpleError("Failed to make compute shader output texture")
+            }
+            self.computeOutputTexture = computeOutputTexture
+            
+            return (backgroundTexture, computeOutputTexture)
+        }
+        
+        return (backgroundTexture, computeOutputTexture)
     }
 }
 
