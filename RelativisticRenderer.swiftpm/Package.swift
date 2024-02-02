@@ -8,20 +8,20 @@ import PackageDescription
 import AppleProductTypes
 
 let package = Package(
-    name: "StudentChallenge",
+    name: "RelativisticRenderer",
     platforms: [
         .iOS("16.0")
     ],
     products: [
         .iOSApplication(
-            name: "StudentChallenge",
+            name: "RelativisticRenderer",
             targets: ["AppModule"],
-            bundleIdentifier: "dev.stackotter.StudentChallenge",
+            bundleIdentifier: "dev.stackotter.RelativisticRenderer",
             teamIdentifier: "2W73HS7DLT",
             displayVersion: "1.0",
             bundleVersion: "1",
-            appIcon: .placeholder(icon: .map),
-            accentColor: .presetColor(.blue),
+            appIcon: .placeholder(icon: .sandwich),
+            accentColor: .presetColor(.green),
             supportedDeviceFamilies: [
                 .pad,
                 .phone
@@ -31,8 +31,7 @@ let package = Package(
                 .landscapeRight,
                 .landscapeLeft,
                 .portraitUpsideDown(.when(deviceFamilies: [.pad]))
-            ],
-            appCategory: .developerTools
+            ]
         )
     ],
     targets: [
