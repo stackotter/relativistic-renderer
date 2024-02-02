@@ -1,11 +1,33 @@
 import MetalKit
 
-final class RenderCoordinator: NSObject, MetalViewCoordinator {
+final class RenderCoordinator<ConcreteRenderer: Renderer>: NSObject, MetalViewCoordinator {
     let device: any MTLDevice
+    let commandQueue: any MTLCommandQueue
+    var renderer: ConcreteRenderer
     
-    override init() {
-        device = MTLCreateSystemDefaultDevice()!
-        super.init()
+    init(device: any MTLDevice, commandQueue: any MTLCommandQueue, renderer: ConcreteRenderer) {
+        self.device = device
+        self.commandQueue = commandQueue
+        self.renderer = renderer
+    }
+    
+    static func create() throws -> RenderCoordinator {
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            throw SimpleError("Failed to get default Metal device")
+        }
+        
+        guard let commandQueue = device.makeCommandQueue() else {
+            throw SimpleError("Failed to make Metal command queue")
+        }
+        
+        let renderer: ConcreteRenderer
+        do {
+            renderer = try ConcreteRenderer(device: device, commandQueue: commandQueue)
+        } catch {
+            throw SimpleError("Failed to create renderer: \(error)")
+        }
+        
+        return RenderCoordinator(device: device, commandQueue: commandQueue, renderer: renderer)
     }
     
     func configure(_ view: MTKView) {
@@ -13,91 +35,46 @@ final class RenderCoordinator: NSObject, MetalViewCoordinator {
         view.clearColor = MTLClearColorMake(0, 1, 0, 1)
         view.device = device
         view.drawableSize = view.frame.size
+        view.framebufferOnly = false
     }
     
-    func update(with view: MTKView) {
-        // TODO: Is this required?
-    }
-    
-    func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
-    }
+    func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
     
     func draw(in view: MTKView) {
-        // TODO: Decide how error handling should work
-        guard let renderPassDescriptor = view.currentRenderPassDescriptor else {
-            print("Failed to get current render pass descriptor")
-            return
-        }
-        
-        guard let drawable = view.currentDrawable else {
-            print("Failed to get current drawable")
-            return
-        }
-        
-        // TODO: Only create once
-        let commandQueue = device.makeCommandQueue()!
-        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
-            print("Failed to make command buffer")
-            return
-        }
-        
-        guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
-            print("Failed to make render command encoder")
-            return
-        }
-        
-        let options = MTLCompileOptions()
-        let library = try! device.makeLibrary(
-            source: """
-            #include <metal_stdlib>
-            
-            using namespace metal;
-            
-            typedef struct {
-                float3 position;
-            } InVertex;
-            
-            typedef struct {
-                float4 position [[position]];
-            } OutVertex;
-            
-            vertex OutVertex vertexFunction(constant InVertex *vertices [[buffer(0)]],
-                                            uint vertexId [[vertex_id]]) {
-                InVertex in = vertices[vertexId];
-                OutVertex out = { .position = float4(in.position, 1) };
-                return out;
+        do {
+            guard let renderPassDescriptor = view.currentRenderPassDescriptor else {
+                throw SimpleError("Failed to get current render pass descriptor")
             }
             
-            fragment float4 fragmentFunction(OutVertex in [[stage_in]]) {
-                return float4(1, 0, 0, 1);
+            guard let drawable = view.currentDrawable else {
+                throw SimpleError("Failed to get current drawable")
             }
-            """,
-            options: options
-        )
-        
-        let pipelineDescriptor = MTLRenderPipelineDescriptor()
-        pipelineDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
-        pipelineDescriptor.colorAttachments[0].isBlendingEnabled = false
-        pipelineDescriptor.vertexFunction = library.makeFunction(name: "vertexFunction")!
-        pipelineDescriptor.fragmentFunction = library.makeFunction(name: "fragmentFunction")!
-        
-        let pipelineState = try! device.makeRenderPipelineState(descriptor: pipelineDescriptor)
-        
-        var vertices: [SIMD3<Float>] = [
-            [0, 1, 0],
-            [1, -1, 0],
-            [-1, -1, 0]
-        ]
-        let bytes = MemoryLayout<SIMD3<Float>>.stride * vertices.count
-        let vertexBuffer = device.makeBuffer(length: bytes)
-        vertexBuffer?.contents().copyMemory(from: &vertices, byteCount: bytes)
-        
-        renderEncoder.setRenderPipelineState(pipelineState)
-        renderEncoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
-        renderEncoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: vertices.count)
-        renderEncoder.endEncoding()
-        commandBuffer.present(drawable)
-        commandBuffer.commit()
-        print("Done draw")
+            
+            guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+                throw SimpleError("Failed to make command buffer")
+            }
+            
+            try renderer.render(
+                view: view,
+                device: device,
+                renderPassDescriptor: renderPassDescriptor,
+                drawable: drawable,
+                commandBuffer: commandBuffer
+            )
+        } catch {
+            // TODO: Handle errors that occur while rendering frames
+            print("Failed to render frame: \(error)")
+        }
     }
+}
+
+protocol Renderer {
+    init(device: MTLDevice, commandQueue: MTLCommandQueue) throws
+    mutating func render(
+        view: MTKView,
+        device: any MTLDevice,
+        renderPassDescriptor: MTLRenderPassDescriptor,
+        drawable: any MTLDrawable,
+        commandBuffer: any MTLCommandBuffer
+    ) throws
 }
