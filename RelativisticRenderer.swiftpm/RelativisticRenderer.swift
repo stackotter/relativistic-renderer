@@ -46,10 +46,11 @@ struct RelativisticRenderer: Renderer {
                 constexpr sampler textureSampler (mag_filter::linear, min_filter::linear);
                 
                 float4 sampleCheckerBoard(float2 uv, float scaleFactor) {
-                    if (length(uv) < 0.035) {
+                    float2 scaledUV = uv * scaleFactor;
+                    if (length(scaledUV) < 0.25) {
                         return float4(1, 0.75, 0, 1);
                     }
-                    if (((int)floor(uv.x * scaleFactor) % 2 == 0) == ((int)floor(uv.y * scaleFactor) % 2 == 0)) {
+                    if (((int)floor(scaledUV.x) % 2 == 0) == ((int)floor(scaledUV.y) % 2 == 0)) {
                         return float4(1, 1, 1, 1);
                     } else {
                         return float4(0, 0, 0, 1);
@@ -69,28 +70,69 @@ struct RelativisticRenderer: Renderer {
                         ((float)gid.y - textureHeight/2) / textureWidth,
                         1
                     );
-
-                    // yaw, pitch
-                    float2 polarRayDirection = float2(
-                        atan2(cartesianRay.x, cartesianRay.z),
-                        atan2(cartesianRay.y, sqrt(cartesianRay.x*cartesianRay.x + 1))
-                    );
                 
                     // The position (relative to camera) of the mass which is acting as a gravitational lens.
-                    float3 massPos = float3(0, 0, 1);
+                    float3 massPos = float3(0, 0, 125);
 
                     // We calculate the angle of deflection based on the impact parameter and a constant.
-                    float3 unitRay = cartesianRay/length(cartesianRay);
-                    float k = 1;
+                    float3 unitRay = normalize(cartesianRay);
+                    float k = 1.0;
                     float impactParam = length(massPos - dot(unitRay, massPos)*unitRay);
                     float angleOfDeflection = k / impactParam;
                 
                     // The deflection occurs in the plane containing the original ray and the mass. Note that
                     // this plane contains the origin.
-                    float3 deflectionPlaneNormal = cross(unitRay, massPos);
+                    float3 deflectionPlaneNormal = normalize(cross(massPos, unitRay));
+                    // The original ray direction (unitRay) forms a coordinate system along with deflectionPlaneNormal
+                    // and the aptly named otherBasisVector.
+                    float3 otherBasisVector = normalize(cross(unitRay, deflectionPlaneNormal)); // TODO: Is this normalized by definition?
                     
-                    float4 color = float4(float3(1, 1, 1) * clamp(abs(angleOfDeflection/100), 0.0, 1.0), 1);
-                    //float4 color = sampleCheckerBoard(cartesianRay.xy, 100);
+                    // The direction of the deflected ray in this special basis with the basis vectors
+                    // unitRay, deflectionPlaneNormal, and otherBasisVector. In this basis, the original
+                    // ray points exactly in the z direction, and the xz plane is the deflection plane.
+                    // In mathematical terms this is an orthonormal basis (all 3 basis vectors are perpendicular
+                    // to one another.
+                    float3 deflectedDirectionInCustomBasis = float3(
+                        sin(angleOfDeflection),
+                        0,
+                        cos(angleOfDeflection)
+                    );
+                    float3 deflectedRayDirection = deflectedDirectionInCustomBasis.x * otherBasisVector
+                                                 + deflectedDirectionInCustomBasis.y * deflectionPlaneNormal
+                                                 + deflectedDirectionInCustomBasis.z * unitRay;
+                    
+                    // This is in the same basis as deflectedDirectionInCustomBasis except that the origin
+                    // is at the deflecting mass instead of the observer.
+                    float3 deflectedRayOriginInCustomBasis = float3(
+                        -deflectedDirectionInCustomBasis.z,
+                        0,
+                        deflectedDirectionInCustomBasis.x
+                    ) * impactParam;
+                    float3 deflectedRayOrigin = massPos
+                                              + deflectedRayOriginInCustomBasis.x * otherBasisVector
+                                              + deflectedRayOriginInCustomBasis.y * deflectionPlaneNormal
+                                              + deflectedRayOriginInCustomBasis.z * unitRay;
+                
+                    // The deflected ray's intersection with the background plane determines the 'uv' we
+                    // sample the background at (not really a normal uv since it doesn't need to be bounded).
+                    float backgroundDistance = 250;
+                    float2 uv = float2(
+                        deflectedRayDirection.x/deflectedRayDirection.z * (backgroundDistance - deflectedRayOrigin.z) + deflectedRayOrigin.x,
+                        deflectedRayDirection.y/deflectedRayDirection.z * (backgroundDistance - deflectedRayOrigin.z) + deflectedRayOrigin.y
+                    );
+                    //float2 uv = float2(
+                    //    unitRay.x/unitRay.z * (backgroundDistance),
+                    //    unitRay.y/unitRay.z * (backgroundDistance)
+                    //);
+
+                    float3 viewRayDirection = float3(0, 0, 1);
+                    float4 color;
+                    if (dot(deflectedRayDirection, viewRayDirection) < 0) {
+                        // If the ray is deflected back towards the observer, render the pixel as black.
+                        color = float4(0, 0, 0, 1);
+                    } else {
+                        color = sampleCheckerBoard(uv, 1.0/5.0);
+                    }
                     outTexture.write(color, gid);
                 }
                 
