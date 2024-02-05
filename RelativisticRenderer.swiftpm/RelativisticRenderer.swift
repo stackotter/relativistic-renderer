@@ -5,6 +5,9 @@ struct RelativisticRenderer: Renderer {
     let computePipelineState: any MTLComputePipelineState
     let blitPipelineState: any MTLRenderPipelineState
     var computeOutputTexture: (any MTLTexture)?
+    let skyTexture: any MTLTexture
+    let timeBuffer: any MTLBuffer
+    let initialTime: CFAbsoluteTime
     
     init(device: MTLDevice, commandQueue: MTLCommandQueue) throws {
         let options = MTLCompileOptions()
@@ -15,7 +18,7 @@ struct RelativisticRenderer: Renderer {
                 
                 using namespace metal;
                 
-                constexpr sampler textureSampler (mag_filter::linear, min_filter::linear);
+                constexpr sampler textureSampler (mag_filter::linear, min_filter::linear, address::repeat);
                 
                 float4 sampleCheckerBoard(float2 uv, float scaleFactor) {
                     float2 scaledUV = uv * scaleFactor;
@@ -29,16 +32,18 @@ struct RelativisticRenderer: Renderer {
                     }
                 }
                 
-                kernel void computeFunction(texture2d<float, access::write> outTexture [[texture(0)]],
-                                            uint2 gid [[thread_position_in_grid]]) {
+                kernel void computeFunction(uint2 gid [[thread_position_in_grid]],
+                                            texture2d<float, access::write> outTexture [[texture(0)]],
+                                            texture2d<float, access::sample> skyTexture [[texture(1)]],
+                                            constant float &time [[buffer(0)]]) {
                     float textureWidth = (float)outTexture.get_width();
                     float textureHeight = (float)outTexture.get_height();
                     
                     // A ray from the camera representing the direction that light must come from to
                     // contribute to the current pixel (we trace this ray backwards).
                     float3 cartesianRay = float3(
-                        ((float)gid.x - textureWidth/2) / textureWidth,
-                        ((float)gid.y - textureHeight/2) / textureWidth,
+                        ((float)gid.x - textureWidth/2) / textureWidth * 2,
+                        ((float)gid.y - textureHeight/2) / textureWidth * 2,
                         1
                     );
                 
@@ -86,24 +91,19 @@ struct RelativisticRenderer: Renderer {
                 
                     // The deflected ray's intersection with the background plane determines the 'uv' we
                     // sample the background at (not really a normal uv since it doesn't need to be bounded).
-                    float backgroundDistance = 250;
-                    float2 uv = float2(
-                        deflectedRayDirection.x/deflectedRayDirection.z * (backgroundDistance - deflectedRayOrigin.z) + deflectedRayOrigin.x,
-                        deflectedRayDirection.y/deflectedRayDirection.z * (backgroundDistance - deflectedRayOrigin.z) + deflectedRayOrigin.y
+                    float2 deflectedRayDirectionPolar = float2(
+                        atan2(deflectedRayDirection.z, deflectedRayDirection.x), // yaw
+                        atan2(deflectedRayDirection.y, length(deflectedRayDirection.xz)) // pitch
                     );
-                    //float2 uv = float2(
-                    //    unitRay.x/unitRay.z * (backgroundDistance),
-                    //    unitRay.y/unitRay.z * (backgroundDistance)
-                    //);
+                    float2 uv = float2(
+                        (deflectedRayDirectionPolar.x + M_PI_F) / (2 * M_PI_F),
+                        (deflectedRayDirectionPolar.y + M_PI_F / 2) / (M_PI_F)
+                    );
 
                     float3 viewRayDirection = float3(0, 0, 1);
                     float4 color;
-                    if (dot(deflectedRayDirection, viewRayDirection) < 0) {
-                        // If the ray is deflected back towards the observer, render the pixel as black.
-                        color = float4(0, 0, 0, 1);
-                    } else {
-                        color = sampleCheckerBoard(uv, 1.0/5.0);
-                    }
+                    uv.x += time / 60.0;
+                    color = skyTexture.sample(textureSampler, uv);
                     outTexture.write(color, gid);
                 }
                 
@@ -163,6 +163,18 @@ struct RelativisticRenderer: Renderer {
         } catch {
             throw SimpleError("Failed to make blit pipeline state: \(error)")
         }
+
+        do {
+            skyTexture = try MTKTextureLoader(device: device).newTexture(name: "starmap_2020_4k", scaleFactor: 1, bundle: Bundle.main)
+        } catch {
+            throw SimpleError("Failed to load sky texture: \(error)")
+        }
+        
+        guard let timeBuffer = device.makeBuffer(length: MemoryLayout<Float>.stride) else {
+            throw SimpleError("Failed to create time buffer")
+        }
+        self.timeBuffer = timeBuffer
+        initialTime = CFAbsoluteTimeGetCurrent()
     }
     
     mutating func render(view: MTKView, device: MTLDevice, renderPassDescriptor: MTLRenderPassDescriptor, drawable: MTLDrawable, commandBuffer: MTLCommandBuffer) throws {
@@ -172,8 +184,12 @@ struct RelativisticRenderer: Renderer {
             throw SimpleError("Failed to make compute command encoder")
         }
         
+        var time = Float(CFAbsoluteTimeGetCurrent() - initialTime)
+        timeBuffer.contents().copyMemory(from: &time, byteCount: MemoryLayout<Float>.stride)
         computeEncoder.setComputePipelineState(computePipelineState)
         computeEncoder.setTexture(computeOutputTexture, index: 0)
+        computeEncoder.setTexture(skyTexture, index: 1)
+        computeEncoder.setBuffer(timeBuffer, offset: 0, index: 0)
         computeEncoder.dispatchThreadgroups(
             MTLSize(width: Int(view.drawableSize.width + 15) / 16, height: Int(view.drawableSize.height + 15) / 16, depth: 1),
             threadsPerThreadgroup: MTLSize(width: 16, height: 16, depth: 1)
