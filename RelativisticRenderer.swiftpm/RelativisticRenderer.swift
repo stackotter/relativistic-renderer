@@ -53,8 +53,13 @@ struct RelativisticRenderer: Renderer {
                     // We calculate the angle of deflection based on the impact parameter and a constant.
                     float3 unitRay = normalize(cartesianRay);
                     float k = 1.0;
+                    float schwarzchildRadius = 10.0;
                     float impactParam = length(massPos - dot(unitRay, massPos)*unitRay);
-                    float angleOfDeflection = k / impactParam;
+                    if (impactParam < schwarzchildRadius) {
+                        outTexture.write(float4(0, 0, 0, 1), gid);
+                        return;
+                    }
+                    float angleOfDeflection = k / (impactParam - schwarzchildRadius);
                 
                     // The deflection occurs in the plane containing the original ray and the mass. Note that
                     // this plane contains the origin.
@@ -104,6 +109,7 @@ struct RelativisticRenderer: Renderer {
                     float4 color;
                     uv.x += time / 60.0;
                     color = skyTexture.sample(textureSampler, uv);
+                    //color = sampleCheckerBoard(uv, 50.0);
                     outTexture.write(color, gid);
                 }
                 
