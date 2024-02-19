@@ -1,7 +1,6 @@
 import MetalKit
 
 struct RelativisticRenderer: Renderer {
-    let library: any MTLLibrary
     let computePipelineState: any MTLComputePipelineState
     let blitPipelineState: any MTLRenderPipelineState
     var computeOutputTexture: (any MTLTexture)?
@@ -9,166 +8,20 @@ struct RelativisticRenderer: Renderer {
     let timeBuffer: any MTLBuffer
     let initialTime: CFAbsoluteTime
     
-    init(device: MTLDevice, commandQueue: MTLCommandQueue) throws {
-        let options = MTLCompileOptions()
-        do {
-            library = try device.makeLibrary(
-                source: """
-                #include <metal_stdlib>
-                
-                using namespace metal;
-                
-                constexpr sampler textureSampler (mag_filter::linear, min_filter::linear, address::repeat);
-                
-                float4 sampleCheckerBoard(float2 uv, float scaleFactor) {
-                    float2 scaledUV = uv * scaleFactor;
-                    if (length(scaledUV) < 0.25) {
-                        return float4(1, 0.75, 0, 1);
-                    }
-                    if (((int)floor(scaledUV.x) % 2 == 0) == ((int)floor(scaledUV.y) % 2 == 0)) {
-                        return float4(1, 1, 1, 1);
-                    } else {
-                        return float4(0, 0, 0, 1);
-                    }
-                }
-                
-                kernel void computeFunction(uint2 gid [[thread_position_in_grid]],
-                                            texture2d<float, access::write> outTexture [[texture(0)]],
-                                            texture2d<float, access::sample> skyTexture [[texture(1)]],
-                                            constant float &time [[buffer(0)]]) {
-                    float textureWidth = (float)outTexture.get_width();
-                    float textureHeight = (float)outTexture.get_height();
-                    
-                    // A ray from the camera representing the direction that light must come from to
-                    // contribute to the current pixel (we trace this ray backwards).
-                    float3 cartesianRay = float3(
-                        ((float)gid.x - textureWidth/2) / textureWidth * 2,
-                        ((float)gid.y - textureHeight/2) / textureWidth * 2,
-                        1
-                    );
-                
-                    // The position (relative to camera) of the mass which is acting as a gravitational lens.
-                    float3 massPos = float3(0, 0, 125);
-
-                    // We calculate the angle of deflection based on the impact parameter and a constant.
-                    float3 unitRay = normalize(cartesianRay);
-                    float k = 1.0;
-                    float schwarzchildRadius = 10.0;
-                    float impactParam = length(massPos - dot(unitRay, massPos)*unitRay);
-                    if (impactParam < schwarzchildRadius) {
-                        outTexture.write(float4(0, 0, 0, 1), gid);
-                        return;
-                    }
-                    float angleOfDeflection = k / (impactParam - schwarzchildRadius);
-                
-                    // The deflection occurs in the plane containing the original ray and the mass. Note that
-                    // this plane contains the origin.
-                    float3 deflectionPlaneNormal = normalize(cross(massPos, unitRay));
-                    // The original ray direction (unitRay) forms a coordinate system along with deflectionPlaneNormal
-                    // and the aptly named otherBasisVector.
-                    float3 otherBasisVector = normalize(cross(unitRay, deflectionPlaneNormal)); // TODO: Is this normalized by definition?
-                    
-                    // The direction of the deflected ray in this special basis with the basis vectors
-                    // unitRay, deflectionPlaneNormal, and otherBasisVector. In this basis, the original
-                    // ray points exactly in the z direction, and the xz plane is the deflection plane.
-                    // In mathematical terms this is an orthonormal basis (all 3 basis vectors are perpendicular
-                    // to one another.
-                    float3 deflectedDirectionInCustomBasis = float3(
-                        sin(angleOfDeflection),
-                        0,
-                        cos(angleOfDeflection)
-                    );
-                    float3 deflectedRayDirection = deflectedDirectionInCustomBasis.x * otherBasisVector
-                                                 + deflectedDirectionInCustomBasis.y * deflectionPlaneNormal
-                                                 + deflectedDirectionInCustomBasis.z * unitRay;
-                    
-                    // This is in the same basis as deflectedDirectionInCustomBasis except that the origin
-                    // is at the deflecting mass instead of the observer.
-                    float3 deflectedRayOriginInCustomBasis = float3(
-                        -deflectedDirectionInCustomBasis.z,
-                        0,
-                        deflectedDirectionInCustomBasis.x
-                    ) * impactParam;
-                    float3 deflectedRayOrigin = massPos
-                                              + deflectedRayOriginInCustomBasis.x * otherBasisVector
-                                              + deflectedRayOriginInCustomBasis.y * deflectionPlaneNormal
-                                              + deflectedRayOriginInCustomBasis.z * unitRay;
-                
-                    // The deflected ray's intersection with the background plane determines the 'uv' we
-                    // sample the background at (not really a normal uv since it doesn't need to be bounded).
-                    float2 deflectedRayDirectionPolar = float2(
-                        atan2(deflectedRayDirection.z, deflectedRayDirection.x), // yaw
-                        atan2(deflectedRayDirection.y, length(deflectedRayDirection.xz)) // pitch
-                    );
-                    float2 uv = float2(
-                        (deflectedRayDirectionPolar.x + M_PI_F) / (2 * M_PI_F),
-                        (deflectedRayDirectionPolar.y + M_PI_F / 2) / (M_PI_F)
-                    );
-
-                    float3 viewRayDirection = float3(0, 0, 1);
-                    float4 color;
-                    uv.x += time / 60.0;
-                    color = skyTexture.sample(textureSampler, uv);
-                    //color = sampleCheckerBoard(uv, 50.0);
-                    outTexture.write(color, gid);
-                }
-                
-                typedef struct {
-                    float4 position [[position]];
-                    float2 uv;
-                } BlitVertex;
-                
-                constant BlitVertex blitVertices[] = {
-                    { .position = float4(-1.0, 1.0, 0, 1), .uv = float2(0, 0) },
-                    { .position = float4(1.0, 1.0, 0, 1), .uv = float2(1, 0) },
-                    { .position = float4(1.0, -1.0, 0, 1), .uv = float2(1, 1) },
-                    { .position = float4(1.0, -1.0, 0, 1), .uv = float2(1, 1) },
-                    { .position = float4(-1.0, -1.0, 0, 1), .uv = float2(0, 1) },
-                    { .position = float4(-1.0, 1.0, 0, 1), .uv = float2(0, 0) }
-                };
-                
-                vertex BlitVertex blitVertexFunction(uint vertexId [[vertex_id]]) {
-                    return blitVertices[vertexId];
-                }
-
-                fragment float4 blitFragmentFunction(BlitVertex in [[stage_in]],
-                                                 texture2d<float, access::sample> inTexture [[texture(0)]]) {
-                    return inTexture.sample(textureSampler, in.uv);
-                }
-                """,
-                options: options
-            )
-        } catch {
-            throw SimpleError("Failed to compile shaders: \(error)")
-        }
+    init(device: any MTLDevice, commandQueue: any MTLCommandQueue) throws {
+        let library = try Self.compileMetalLibrary(device, source: rayTracingShaderSource)
+        let computeFunction = try Self.getFunction(library, name: "computeFunction")
+        computePipelineState = try Self.makeComputePipelineState(device, function: computeFunction)
         
-        guard let computeFunction = library.makeFunction(name: "computeFunction") else {
-            throw SimpleError("Failed to get compute function")
-        }
-
-        do {
-            computePipelineState = try device.makeComputePipelineState(function: computeFunction)
-        } catch {
-            throw SimpleError("Failed to make compute pipeline state: \(error)")
-        }
+        let blitLibrary = try Self.compileMetalLibrary(device, source: blitShaderSource)
+        let blitVertexFunction = try Self.getFunction(blitLibrary, name: "blitVertexFunction")
+        let blitFragmentFunction = try Self.getFunction(blitLibrary, name: "blitFragmentFunction")
         
-        guard
-            let blitVertexFunction = library.makeFunction(name: "blitVertexFunction"),
-            let blitFragmentFunction = library.makeFunction(name: "blitFragmentFunction")
-        else {
-            throw SimpleError("Failed to get vertex function or fragment function for blit pipeline")
-        }
-        
-        let blitPipelineDescriptor = MTLRenderPipelineDescriptor()
-        blitPipelineDescriptor.vertexFunction = blitVertexFunction
-        blitPipelineDescriptor.fragmentFunction = blitFragmentFunction
-        blitPipelineDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
-        
-        do {
-            blitPipelineState = try device.makeRenderPipelineState(descriptor: blitPipelineDescriptor)
-        } catch {
-            throw SimpleError("Failed to make blit pipeline state: \(error)")
-        }
+        blitPipelineState = try Self.makeRenderPipelineState(
+            device,
+            vertexFunction: blitVertexFunction,
+            fragmentFunction: blitFragmentFunction
+        )
 
         do {
             skyTexture = try MTKTextureLoader(device: device).newTexture(name: "starmap_2020_4k", scaleFactor: 1, bundle: Bundle.main)
@@ -236,5 +89,45 @@ struct RelativisticRenderer: Renderer {
         
         return computeOutputTexture
     }
+    
+    static func compileMetalLibrary(_ device: any MTLDevice, source: String) throws -> any MTLLibrary {
+        let options = MTLCompileOptions()
+        do {
+            return try device.makeLibrary(source: source, options: options)
+        } catch {
+            throw SimpleError("Failed to compile shaders: \(error)")
+        }
+    }
+    
+    static func getFunction(_ library: any MTLLibrary, name: String) throws -> any MTLFunction {
+        guard let function = library.makeFunction(name: name) else {
+            throw SimpleError("Failed to get function '\(name)'")
+        }
+        return function
+    }
+    
+    static func makeComputePipelineState(_ device: any MTLDevice, function: any MTLFunction) throws -> any MTLComputePipelineState {
+        do {
+            return try device.makeComputePipelineState(function: function)
+        } catch {
+            throw SimpleError("Failed to make compute pipeline state: \(error)")
+        }
+    }
+    
+    static func makeRenderPipelineState(
+        _ device: any MTLDevice,
+        vertexFunction: any MTLFunction,
+        fragmentFunction: any MTLFunction
+    ) throws -> any MTLRenderPipelineState {
+        let pipelineDescriptor = MTLRenderPipelineDescriptor()
+        pipelineDescriptor.vertexFunction = vertexFunction
+        pipelineDescriptor.fragmentFunction = fragmentFunction
+        pipelineDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
+        
+        do {
+            return try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
+        } catch {
+            throw SimpleError("Failed to make pipeline state: \(error)")
+        }
+    }
 }
-
