@@ -8,6 +8,10 @@ func /=(_ lhs: inout CGPoint, _ rhs: CGFloat) {
     lhs = lhs / rhs
 }
 
+func /(_ lhs: CGSize, _ rhs: CGFloat) -> CGSize {
+    return lhs * (1 / rhs)
+}
+
 func +(_ lhs: CGPoint, _ rhs: CGPoint) -> CGPoint {
     var lhs = lhs
     lhs.x += rhs.x
@@ -18,6 +22,18 @@ func +(_ lhs: CGPoint, _ rhs: CGPoint) -> CGPoint {
 func +=(_ lhs: inout CGPoint, _ rhs: CGPoint) {
     lhs.x += rhs.x
     lhs.y += rhs.y
+}
+
+func +(_ lhs: CGPoint, _ rhs: CGSize) -> CGPoint {
+    var lhs = lhs
+    lhs.x += rhs.width
+    lhs.y += rhs.height
+    return lhs
+}
+
+func +=(_ lhs: inout CGPoint, _ rhs: CGSize) {
+    lhs.x += rhs.width
+    lhs.y += rhs.height
 }
 
 func -(_ lhs: CGPoint, _ rhs: CGPoint) -> CGPoint {
@@ -42,6 +58,13 @@ func *(_ lhs: CGPoint, _ rhs: CGFloat) -> CGPoint {
 func *=(_ lhs: inout CGPoint, _ rhs: CGFloat) {
     lhs.x *= rhs
     lhs.y *= rhs
+}
+
+func *(_ lhs: CGSize, _ rhs: CGFloat) -> CGSize {
+    var lhs = lhs
+    lhs.width *= rhs
+    lhs.height *= rhs
+    return lhs
 }
 
 protocol CGVector {

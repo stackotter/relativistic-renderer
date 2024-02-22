@@ -60,7 +60,6 @@ class GestureCatcherView: UIView {
             
             let pinchLocation = gesture.location(in: self)
             let scaleCenter = pinchLocation - offset
-            print(pinchLocation, offset, scaleCenter)
             
             offset -= scaleCenter * (newScale / previousScale - 1)
             offsetChanged(offset)
