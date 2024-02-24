@@ -34,19 +34,20 @@ struct DiagramBuilder {
     }
 }
 
+// TODO: Implement precise positioning UI (so that users can position the observer more precisely
 struct DiagramView: View {
     static let lineWidth: CGFloat = 2
     static let g: CGFloat = 1
     static let c: CGFloat = 1
-    static let blackHolePosition = CGPoint(x: 700, y: 700)
+    static let blackHolePosition = CGPoint(x: 30, y: 15)
 
-    @State var scale: CGFloat = 1
+    @State var scale: CGFloat = 30
     @State var offset: CGPoint = CGPoint(x: Self.lineWidth, y: Self.lineWidth)
     @State var timeStepMagnitude: CGFloat = 1
     @State var steps = 1000
-    @State var blackHoleMass: CGFloat = 1
+    @State var blackHoleMass: CGFloat = 0.5
     
-    @State var currentObserverPosition = CGPoint(x: 220, y: 500)
+    @State var currentObserverPosition = CGPoint(x: 10, y: 15)
     @GestureState var observerDragDistance = CGSize.zero
     
     var timeStep: CGFloat {
@@ -68,7 +69,7 @@ struct DiagramView: View {
                 Path { path in
                     var builder = DiagramBuilder(path: path, scale: scale, offset: offset)
                     for i in 0..<10 {
-                        let radians = -CGFloat.pi / 4 * CGFloat(i) / 10 + .pi / 8
+                        let radians = -CGFloat.pi / 4 * CGFloat(i) / 9 + .pi / 8
                         let velocity = CGPoint(x: Self.c * cos(radians), y: Self.c * sin(radians))
                         builder.addLine(Self.trajectory(
                             initialPosition: observerPosition,
@@ -141,54 +142,58 @@ struct DiagramView: View {
         var points: [CGPoint] = [initialPosition]
         var polarPosition = (initialPosition - massPosition).polar
 
-        let h = 0.00001
-        let nudgedPosition = (initialPosition - massPosition + initialVelocity * h).polar
-        var polarVelocity = PolarPoint(radius: (nudgedPosition.radius - polarPosition.radius) / h, theta: (nudgedPosition.theta - polarPosition.theta) / h)
-
-        // We reference mass enough for it to make sense to have a shorter name locally
         let m = mass
-        let schwarzschildRadius = 2 * g * m / (c * c)
-        var t: CGFloat = 0
+        let schwarzschildRadius = 2 * g * mass / (c * c)
+        var u = 1 / polarPosition.radius
+        let u0 = u
+        var xBasis = polarPosition.cartesian
+        xBasis /= xBasis.magnitude
+        var yBasis = CGPoint(x: -xBasis.y, y: xBasis.x)
+        yBasis /= yBasis.magnitude
+        let ray = initialVelocity / initialVelocity.magnitude
+        if atan2(dot(ray, yBasis), dot(ray, xBasis)) < 0 {
+            yBasis *= -1
+        }
+        var du = -dot(ray, xBasis) / dot(ray, yBasis) * u
+        let du0 = du
+        var phi: CGFloat = 0
+        
+        var position: CGPoint = polarPosition.cartesian
+        var previousPosition = position
         for _ in 0..<steps {
-            let r = polarPosition.radius
-            let timeStep = timeStep * r / 100
-            let christoffelRTT = g * m / (c * c * r * r) * (1 - 2 * g * m / (c * c * r))
-            let christoffelRRR = -g * m / (c * c * r * r) / (1 - 2 * g * m / (c * c * r))
-            let christoffelRThetaTheta = -r * (1 - 2 * g * m / (c * c * r))
-            let christoffelThetaRTheta = 1 / r
+            // TODO: Make this configurable
+            let maxRevolutions: CGFloat = 10
+            var step = maxRevolutions * 2 * .pi / CGFloat(steps)
+            
+            // Prevents us from stepping into the blackhole
+            // TODO: Understand and customise this
+            let maxUStepRatio = (1 - log(u)) * 10 / CGFloat(steps)
+            if (du > 0 || (du0 < 0 && u0 / u < 5)) && abs(du) > abs(maxUStepRatio * u) / step {
+                step = maxUStepRatio * u / abs(du)
+            }
 
-            let dTdTau: CGFloat = 1
-            let dRdTau = polarVelocity.radius
-            let dThetaDTau = polarVelocity.theta
+            // TODO: Update this differential equation to account for blackhole mass
+            u += du * step
+            let ddu = -u * (1 - 1.5 * u * u)
+            du += ddu * step
+            phi += step
 
-            let d2RdTau2 = -christoffelRRR * dRdTau * dRdTau - christoffelRTT * dTdTau * dTdTau - christoffelRThetaTheta * dThetaDTau * dThetaDTau
-            let d2ThetaDTau2 = -christoffelThetaRTheta * dRdTau * dThetaDTau
-            
-            polarVelocity.radius += d2RdTau2 * timeStep
-            polarVelocity.theta += d2ThetaDTau2 * timeStep
-            
-//            polarPosition.radius += polarVelocity.radius * timeStep
-//            polarPosition.theta += polarVelocity.theta * timeStep
-            
-            let velocity = (
-                PolarPoint(
-                    radius: polarPosition.radius + polarVelocity.radius * h,
-                    theta: polarPosition.theta + polarVelocity.theta * h
-                ).cartesian
-                -
-                polarPosition.cartesian
-            ) / h
-            
-            let newPosition = polarPosition.cartesian + velocity * timeStep
-            // At this point the light ray can be considered sucked in (to avoid wasting time following it around the photon sphere forever)
-            if newPosition.polar.radius < schwarzschildRadius * 1.01 {
+            if u < 0 {
+                // The ray has shot off to infinity, extend it an arbitrarily large amount and stop
+                let step: CGFloat = 10000
+                let velocity = position - previousPosition
+                points.append(position + velocity / velocity.magnitude * step + massPosition)
                 break
             }
-            points.append(newPosition + massPosition)
-            polarPosition = newPosition.polar
-//            points.append(polarPosition.cartesian + massPosition)
+
+            previousPosition = position
+            position = (xBasis * cos(phi) + yBasis * sin(phi)) / u
+            points.append(position + massPosition)
             
-            t += timeStep
+            // Stop once we cross the event horizon
+            if u > 1 / schwarzschildRadius {
+                break
+            }
         }
         
         return points

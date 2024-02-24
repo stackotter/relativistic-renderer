@@ -34,68 +34,62 @@ let rayTracingShaderSource =
         );
 
         // The position (relative to camera) of the mass which is acting as a gravitational lens.
-        float3 massPos = float3(0, 0, 125);
+        float3 massPos = float3(0, 0, 20);
 
-        // We calculate the angle of deflection based on the impact parameter and a constant.
+        // We rotate our coordinate system based on the initial velocity and the position of the mass
+        // so that the ray travels in the xz-plane.
+        float3 position = -massPos;
+        float3 xBasis = normalize(position);
         float3 unitRay = normalize(cartesianRay);
-        float k = 1.0;
-        float schwarzchildRadius = 10.0;
-        float impactParam = length(massPos - dot(unitRay, massPos)*unitRay);
-        if (impactParam < schwarzchildRadius) {
-            outTexture.write(float4(0, 0, 0, 1), gid);
-            return;
+        // A vector perpendicular to xBasis and in the same plane as xBasis and unitRay
+        float3 yBasis = normalize(cross(cross(xBasis, unitRay), xBasis));
+
+        float r = length(position);
+        float u = 1.0 / r;
+        float u0 = u;
+        float du = -dot(unitRay, xBasis) / dot(unitRay, yBasis) * u;
+        float du0 = du;
+        
+        float phi = 0.0;
+        
+        float3 previousPosition = position;
+        float previousU = u;
+
+        int steps = 200;
+        float maxRevolutions = 2.0;
+        for (int i = 0; i < steps; i++) {
+            float step = maxRevolutions * 2.0 * M_PI_F / float(steps);
+            previousU = u;
+            u += du * step;
+            float ddu = -u * (1.0 - 1.5 * u * u);
+            du += ddu * step;
+            if (u <= 0.0) {
+                // Non-positive u means that the radius has exploded off to infinity. Just
+                // set it to something really small (yet positive) and finish tracing.
+                u = 0.000001;
+                break;
+            }
+            phi += step;
+            previousPosition = position;
+            position = (cos(phi) * xBasis + sin(phi) * yBasis) / u;
+            
+            if (u > 1.0) {
+                break;
+            }
         }
-        float angleOfDeflection = k / (impactParam - schwarzchildRadius);
-
-        // The deflection occurs in the plane containing the original ray and the mass. Note that
-        // this plane contains the origin.
-        float3 deflectionPlaneNormal = normalize(cross(massPos, unitRay));
-        // The original ray direction (unitRay) forms a coordinate system along with deflectionPlaneNormal
-        // and the aptly named otherBasisVector.
-        float3 otherBasisVector = normalize(cross(unitRay, deflectionPlaneNormal)); // TODO: Is this normalized by definition?
-        
-        // The direction of the deflected ray in this special basis with the basis vectors
-        // unitRay, deflectionPlaneNormal, and otherBasisVector. In this basis, the original
-        // ray points exactly in the z direction, and the xz plane is the deflection plane.
-        // In mathematical terms this is an orthonormal basis (all 3 basis vectors are perpendicular
-        // to one another.
-        float3 deflectedDirectionInCustomBasis = float3(
-            sin(angleOfDeflection),
-            0,
-            cos(angleOfDeflection)
-        );
-        float3 deflectedRayDirection = deflectedDirectionInCustomBasis.x * otherBasisVector
-                                     + deflectedDirectionInCustomBasis.y * deflectionPlaneNormal
-                                     + deflectedDirectionInCustomBasis.z * unitRay;
-        
-        // This is in the same basis as deflectedDirectionInCustomBasis except that the origin
-        // is at the deflecting mass instead of the observer.
-        float3 deflectedRayOriginInCustomBasis = float3(
-            -deflectedDirectionInCustomBasis.z,
-            0,
-            deflectedDirectionInCustomBasis.x
-        ) * impactParam;
-        float3 deflectedRayOrigin = massPos
-                                  + deflectedRayOriginInCustomBasis.x * otherBasisVector
-                                  + deflectedRayOriginInCustomBasis.y * deflectionPlaneNormal
-                                  + deflectedRayOriginInCustomBasis.z * unitRay;
-
-        // The deflected ray's intersection with the background plane determines the 'uv' we
-        // sample the background at (not really a normal uv since it doesn't need to be bounded).
-        float2 deflectedRayDirectionPolar = float2(
-            atan2(deflectedRayDirection.z, deflectedRayDirection.x), // yaw
-            atan2(deflectedRayDirection.y, length(deflectedRayDirection.xz)) // pitch
-        );
-        float2 uv = float2(
-            (deflectedRayDirectionPolar.x + M_PI_F) / (2 * M_PI_F),
-            (deflectedRayDirectionPolar.y + M_PI_F / 2) / (M_PI_F)
-        );
-
-        float3 viewRayDirection = float3(0, 0, 1);
+    
+        float schwarzschildRadius = 1.0;
         float4 color;
-        uv.x += time / 60.0;
-        color = skyTexture.sample(textureSampler, uv);
-        //color = sampleCheckerBoard(uv, 50.0);
+        if (1.0 / u < schwarzschildRadius ) {
+            color = float4(1, 0, 0, 1);
+        } else {
+            float3 ray = position - previousPosition;
+            float2 uv = float2(
+                atan2(ray.z, ray.x) / (2 * M_PI_F) + 0.5 + time * 0.01,
+                atan2(ray.y, length(ray.xz)) / M_PI_F + 0.5
+            );
+            color = skyTexture.sample(textureSampler, uv);
+        }
         outTexture.write(color, gid);
     }
     """

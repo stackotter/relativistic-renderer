@@ -99,6 +99,10 @@ extension CGPoint {
     }
 }
 
+func dot(_ lhs: CGPoint, _ rhs: CGPoint) -> CGFloat {
+    lhs.x * rhs.x + lhs.y * rhs.y
+}
+
 struct PolarPoint {
     var radius: CGFloat
     var theta: CGFloat
