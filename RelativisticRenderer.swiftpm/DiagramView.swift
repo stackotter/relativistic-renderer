@@ -34,12 +34,36 @@ struct DiagramBuilder {
     }
 }
 
+struct Diagram: View {
+    var scale: CGFloat
+    var offset: CGPoint
+    var buildDiagram: (inout DiagramBuilder) -> Void
+    var color = Color.white
+    var strokeStyle = StrokeStyle()
+    
+    var body: some View {
+        Path { path in
+            var builder = DiagramBuilder(path: path, scale: scale, offset: offset)
+            buildDiagram(&builder)
+            path = builder.path
+        }
+        .stroke(color, style: strokeStyle)
+    }
+    
+    func stroke(_ color: Color, style: StrokeStyle) -> Self {
+        var diagram = self
+        diagram.color = color
+        diagram.strokeStyle = style
+        return diagram
+    }
+}
+
 // TODO: Implement precise positioning UI (so that users can position the observer more precisely
 struct DiagramView: View {
     static let lineWidth: CGFloat = 2
     static let g: CGFloat = 1
     static let c: CGFloat = 1
-    static let blackHolePosition = CGPoint(x: 30, y: 15)
+    static let blackHolePosition = CGPoint(x: 26, y: 15)
 
     @State var scale: CGFloat = 30
     @State var offset: CGPoint = CGPoint(x: Self.lineWidth, y: Self.lineWidth)
@@ -66,33 +90,37 @@ struct DiagramView: View {
     var body: some View {
         ZStack {
             GeometryReader { geometry in
-                Path { path in
-                    var builder = DiagramBuilder(path: path, scale: scale, offset: offset)
-                    for i in 0..<10 {
-                        let radians = -CGFloat.pi / 4 * CGFloat(i) / 9 + .pi / 8
-                        let velocity = CGPoint(x: Self.c * cos(radians), y: Self.c * sin(radians))
-                        builder.addLine(Self.trajectory(
-                            initialPosition: observerPosition,
-                            initialVelocity: velocity,
-                            massPosition: Self.blackHolePosition,
-                            mass: blackHoleMass,
-                            timeStep: timeStep,
-                            steps: steps
-                        ))
+                ZStack {
+                    Diagram(scale: scale, offset: offset) { builder in
+                        for i in 0...10 {
+                            let radians = -CGFloat.pi / 4 * CGFloat(i) / 10 + .pi / 8
+                            let velocity = CGPoint(x: Self.c * cos(radians), y: Self.c * sin(radians))
+                            builder.addLine(Self.trajectory(
+                                initialPosition: observerPosition,
+                                initialVelocity: velocity,
+                                massPosition: Self.blackHolePosition,
+                                mass: blackHoleMass,
+                                timeStep: timeStep,
+                                steps: steps
+                            ))
+                        }
+                    }
+                    .stroke(Color.yellow, style: StrokeStyle(lineWidth: Self.lineWidth))
+                    
+                    Diagram(scale: scale, offset: offset) { builder in
                         builder.addCircle(center: Self.blackHolePosition, radius: schwarzschildRadius)
                     }
-                    path = builder.path
+                    .stroke(Color.white, style: StrokeStyle(lineWidth: Self.lineWidth))
                 }
-                .stroke(Color.white, style: StrokeStyle(lineWidth: Self.lineWidth))
             }
             .contentShape(Rectangle())
-            .background(Color(red: 21.0/255, green: 28.0/255, blue: 51.0/255))
+            .background(Color.black)
             .clipped()
             .modifier(GestureModifier(offset: $offset, scale: $scale))
             
             VStack(alignment: .leading) {
                 HStack {
-                    Image(systemName: "eye")
+                    Image(systemName: "flashlight.on.fill")
                         .gesture(
                             DragGesture(coordinateSpace: CoordinateSpace.global)
                                 .map { value in
@@ -105,8 +133,9 @@ struct DiagramView: View {
                                     currentObserverPosition += value
                                 }
                         )
-                        .offset(x: -20, y: -5)
-                        .scaleEffect(2)
+                        .rotationEffect(.radians(.pi / 2))
+                        .scaleEffect(3)
+                        .offset(x: -32, y: -10)
                         .offset(x: (observerPosition.x) * scale + offset.x, y: (observerPosition.y) * scale + offset.y)
                         .foregroundColor(.white)
                     Spacer()
@@ -114,19 +143,15 @@ struct DiagramView: View {
                 Spacer()
             }
             
-            HStack {
-                VStack(alignment: .leading) {
-                    Text("Blackhole mass: \(blackHoleMass) (arbitrary units)")
-                    Slider(value: $blackHoleMass, in: 0.01...100)
-                    Text("Time step: \(timeStep)")
-                    Slider(value: $timeStepMagnitude, in: -2...3)
-                    Text("Steps: \(steps)")
-                    Slider(value: $steps.into(), in: 1...10000)
-                    Spacer()
-                }
-                .padding(16)
-                .frame(width: 600)
-                Spacer()
+            ConfigOverlay {
+                Text("Blackhole mass: \(blackHoleMass) (arbitrary units)")
+                Slider(value: $blackHoleMass, in: 0.01...100)
+                
+                Text("Time step: \(timeStep)")
+                Slider(value: $timeStepMagnitude, in: -2...3)
+                
+                Text("Steps: \(steps)")
+                Slider(value: $steps.into(), in: 1...10000)
             }
         }
     }
@@ -140,9 +165,8 @@ struct DiagramView: View {
         steps: Int
     ) -> [CGPoint] {
         var points: [CGPoint] = [initialPosition]
-        var polarPosition = (initialPosition - massPosition).polar
+        let polarPosition = (initialPosition - massPosition).polar
 
-        let m = mass
         let schwarzschildRadius = 2 * g * mass / (c * c)
         var u = 1 / polarPosition.radius
         let u0 = u
@@ -197,14 +221,5 @@ struct DiagramView: View {
         }
         
         return points
-    }
-}
-
-public extension Binding where Value: BinaryInteger {
-    func into<F: BinaryFloatingPoint>() -> Binding<F> {
-        Binding<F>(
-            get: { F(wrappedValue) },
-            set: { wrappedValue = Value($0) }
-        )
     }
 }

@@ -1,12 +1,36 @@
 import MetalKit
 
+enum Background: Int32 {
+    case starMap = 0
+    case checkerBoard = 1
+}
+
 struct RelativisticRenderer: Renderer {
+    struct Configuration: Default {
+        var cameraPosition: SIMD3<Float>
+        var cameraRay: SIMD3<Float>
+        var background: Background
+        var stepCount: Int32
+        var maxRevolutions: Int32
+        var renderAccretionDisk: Bool
+        
+        static let `default` = Self(
+            cameraPosition: SIMD3(0, 2, -20),
+            cameraRay: SIMD3(0, 0, 1),
+            background: .starMap,
+            stepCount: 100,
+            maxRevolutions: 1,
+            renderAccretionDisk: true
+        )
+    }
+
     let computePipelineState: any MTLComputePipelineState
     let blitPipelineState: any MTLRenderPipelineState
     var computeOutputTexture: (any MTLTexture)?
     let skyTexture: any MTLTexture
     let timeBuffer: any MTLBuffer
     let initialTime: CFAbsoluteTime
+    let configBuffer: any MTLBuffer
     
     init(device: any MTLDevice, commandQueue: any MTLCommandQueue) throws {
         let library = try Self.compileMetalLibrary(device, source: rayTracingShaderSource)
@@ -34,9 +58,21 @@ struct RelativisticRenderer: Renderer {
         }
         self.timeBuffer = timeBuffer
         initialTime = CFAbsoluteTimeGetCurrent()
+        
+        guard let configBuffer = device.makeBuffer(length: MemoryLayout<Configuration>.stride) else {
+            throw SimpleError("Failed to create config buffer")
+        }
+        self.configBuffer = configBuffer
     }
     
-    mutating func render(view: MTKView, device: MTLDevice, renderPassDescriptor: MTLRenderPassDescriptor, drawable: MTLDrawable, commandBuffer: MTLCommandBuffer) throws {
+    mutating func render(
+        view: MTKView,
+        configuration: Configuration,
+        device: MTLDevice,
+        renderPassDescriptor: MTLRenderPassDescriptor,
+        drawable: MTLDrawable,
+        commandBuffer: MTLCommandBuffer
+    ) throws {
         let computeOutputTexture = try updateOutputTexture(device, view)
         
         guard let computeEncoder = commandBuffer.makeComputeCommandEncoder() else {
@@ -45,10 +81,14 @@ struct RelativisticRenderer: Renderer {
         
         var time = Float(CFAbsoluteTimeGetCurrent() - initialTime)
         timeBuffer.contents().copyMemory(from: &time, byteCount: MemoryLayout<Float>.stride)
+        var configuration = configuration
+        configBuffer.contents().copyMemory(from: &configuration, byteCount: MemoryLayout<Configuration>.stride)
+
         computeEncoder.setComputePipelineState(computePipelineState)
         computeEncoder.setTexture(computeOutputTexture, index: 0)
         computeEncoder.setTexture(skyTexture, index: 1)
         computeEncoder.setBuffer(timeBuffer, offset: 0, index: 0)
+        computeEncoder.setBuffer(configBuffer, offset: 0, index: 1)
         computeEncoder.dispatchThreadgroups(
             MTLSize(width: Int(view.drawableSize.width + 15) / 16, height: Int(view.drawableSize.height + 15) / 16, depth: 1),
             threadsPerThreadgroup: MTLSize(width: 16, height: 16, depth: 1)
@@ -90,6 +130,7 @@ struct RelativisticRenderer: Renderer {
         return computeOutputTexture
     }
     
+    // TODO: Move these to a Metal util/wrapper/extension
     static func compileMetalLibrary(_ device: any MTLDevice, source: String) throws -> any MTLLibrary {
         let options = MTLCompileOptions()
         do {

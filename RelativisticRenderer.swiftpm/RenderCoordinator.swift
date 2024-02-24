@@ -1,14 +1,23 @@
 import MetalKit
 
 final class RenderCoordinator<ConcreteRenderer: Renderer>: NSObject, MetalViewCoordinator {
+    typealias Configuration = ConcreteRenderer.Configuration
+
     let device: any MTLDevice
     let commandQueue: any MTLCommandQueue
     var renderer: ConcreteRenderer
+    var configuration: ConcreteRenderer.Configuration
     
-    init(device: any MTLDevice, commandQueue: any MTLCommandQueue, renderer: ConcreteRenderer) {
+    init(
+        device: any MTLDevice,
+        commandQueue: any MTLCommandQueue,
+        renderer: ConcreteRenderer,
+        configuration: Configuration
+    ) {
         self.device = device
         self.commandQueue = commandQueue
         self.renderer = renderer
+        self.configuration = configuration
     }
     
     static func create() throws -> RenderCoordinator {
@@ -27,10 +36,17 @@ final class RenderCoordinator<ConcreteRenderer: Renderer>: NSObject, MetalViewCo
             throw SimpleError("Failed to create renderer: \(error)")
         }
         
-        return RenderCoordinator(device: device, commandQueue: commandQueue, renderer: renderer)
+        let configuration = Configuration.default
+        
+        return RenderCoordinator(
+            device: device,
+            commandQueue: commandQueue,
+            renderer: renderer,
+            configuration: configuration
+        )
     }
     
-    func configure(_ view: MTKView) {
+    func setup(_ view: MTKView) {
         view.colorPixelFormat = .bgra8Unorm
         view.clearColor = MTLClearColorMake(0, 1, 0, 1)
         view.device = device
@@ -56,6 +72,7 @@ final class RenderCoordinator<ConcreteRenderer: Renderer>: NSObject, MetalViewCo
             
             try renderer.render(
                 view: view,
+                configuration: configuration,
                 device: device,
                 renderPassDescriptor: renderPassDescriptor,
                 drawable: drawable,
@@ -68,10 +85,16 @@ final class RenderCoordinator<ConcreteRenderer: Renderer>: NSObject, MetalViewCo
     }
 }
 
+protocol Default {
+    static var `default`: Self { get }
+}
+
 protocol Renderer {
+    associatedtype Configuration: Default
     init(device: MTLDevice, commandQueue: MTLCommandQueue) throws
     mutating func render(
         view: MTKView,
+        configuration: Configuration,
         device: any MTLDevice,
         renderPassDescriptor: MTLRenderPassDescriptor,
         drawable: any MTLDrawable,

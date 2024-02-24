@@ -5,6 +5,7 @@ struct MetalView<Coordinator: MetalViewCoordinator>: UIViewRepresentable {
     typealias UIViewType = MTKView
     
     @Binding var error: String?
+    var configuration: Coordinator.Configuration
     let createCoordinator: () throws -> Coordinator
     
     func makeCoordinator() -> Coordinator? {
@@ -21,13 +22,17 @@ struct MetalView<Coordinator: MetalViewCoordinator>: UIViewRepresentable {
     func makeUIView(context: Context) -> MTKView {
         let mtkView = MTKView()
         mtkView.delegate = context.coordinator
-        context.coordinator?.configure(mtkView)
+        context.coordinator?.setup(mtkView)
         return mtkView
     }
     
-    func updateUIView(_ uiView: MTKView, context: Context) {}
+    func updateUIView(_ uiView: MTKView, context: Context) {
+        context.coordinator?.configuration = configuration
+    }
 }
 
 protocol MetalViewCoordinator: MTKViewDelegate {
-    func configure(_ view: MTKView)
+    associatedtype Configuration
+    var configuration: Configuration { get set }
+    func setup(_ view: MTKView)
 }
