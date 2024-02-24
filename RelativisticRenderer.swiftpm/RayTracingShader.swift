@@ -34,7 +34,7 @@ let rayTracingShaderSource =
         );
 
         // The position (relative to camera) of the mass which is acting as a gravitational lens.
-        float3 massPos = float3(0, 0, 20);
+        float3 massPos = float3(0, 2, 10);
 
         // We rotate our coordinate system based on the initial velocity and the position of the mass
         // so that the ray travels in the xz-plane.
@@ -72,6 +72,17 @@ let rayTracingShaderSource =
             phi += step;
             previousPosition = position;
             position = (cos(phi) * xBasis + sin(phi) * yBasis) / u;
+            float3 ray = position - previousPosition;
+            if (sign(previousPosition.y) != sign(position.y)) {
+                // We assume that the photon is travelling in a straight line between the previous
+                // and current positions so that we can easily perform an intersection.
+                float lerpFactor = abs(previousPosition.y) / abs(previousPosition.y - position.y);
+                float r = length(mix(previousPosition, position, lerpFactor));
+                if (r > 1.5 && r < 3.0) {
+                    outTexture.write(float4(1, 1, 1, 1), gid);
+                    return;
+                }
+            }
             
             if (u > 1.0) {
                 break;
@@ -81,7 +92,7 @@ let rayTracingShaderSource =
         float schwarzschildRadius = 1.0;
         float4 color;
         if (1.0 / u < schwarzschildRadius ) {
-            color = float4(1, 0, 0, 1);
+            color = float4(0, 0, 0, 1);
         } else {
             float3 ray = position - previousPosition;
             float2 uv = float2(
