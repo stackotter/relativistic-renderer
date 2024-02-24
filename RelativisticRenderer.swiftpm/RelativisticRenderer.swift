@@ -15,8 +15,8 @@ struct RelativisticRenderer: Renderer {
         var renderAccretionDisk: Bool
         
         static let `default` = Self(
-            cameraPosition: SIMD3(0, 2, -20),
-            cameraRay: SIMD3(0, 0, 1),
+            cameraPosition: SIMD3(0, -1, -20),
+            cameraRay: SIMD3(0, 0, 0),
             background: .starMap,
             stepCount: 100,
             maxRevolutions: 1,

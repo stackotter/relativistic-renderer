@@ -3,6 +3,8 @@ import SwiftUI
 struct RenderView: View {
     @State var error: String?
     @State var rendererConfig = RelativisticRenderer.Configuration.default
+    @State var offset: CGPoint = .zero
+    @State var scale: CGFloat = 1
     
     var body: some View {
         if let error {
@@ -12,6 +14,13 @@ struct RenderView: View {
             ZStack {
                 MetalView(error: $error, configuration: rendererConfig) {
                     try RenderCoordinator<RelativisticRenderer>.create()
+                }
+                .overlay(GestureCatcher(offset: $offset, scale: $scale))
+                .onChange(of: scale) { newValue in
+                    rendererConfig.cameraPosition.z = -20 / Float(newValue)
+                }
+                .onChange(of: offset) { newValue in
+                    rendererConfig.cameraPosition.y = -1 - Float(offset.y) / 25
                 }
                 
                 ConfigOverlay {

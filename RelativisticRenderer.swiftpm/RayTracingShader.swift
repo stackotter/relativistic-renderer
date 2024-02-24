@@ -96,14 +96,13 @@ let rayTracingShaderSource =
             1
         );
 
-        // The position (relative to camera) of the mass which is acting as a gravitational lens.
-        float3 massPos = float3(0, 1, 10);
+        // TODO: Make these configurable or physically accurate
         float accretionDiskStart = 1.5;
         float accretionDiskEnd = 3.0;
 
         // We rotate our coordinate system based on the initial velocity and the position of the mass
         // so that the ray travels in the xz-plane.
-        float3 position = -massPos;
+        float3 position = config.cameraPosition;
         float3 xBasis = normalize(position);
         float3 unitRay = normalize(cartesianRay);
         // A vector perpendicular to xBasis and in the same plane as xBasis and unitRay

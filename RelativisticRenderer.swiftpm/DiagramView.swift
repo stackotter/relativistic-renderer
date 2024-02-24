@@ -198,7 +198,7 @@ struct DiagramView: View {
 
             // TODO: Update this differential equation to account for blackhole mass
             u += du * step
-            let ddu = -u * (1 - 1.5 * u * u)
+            let ddu = -u * (1 - 6 * mass * mass * u * u)
             du += ddu * step
             phi += step
 
