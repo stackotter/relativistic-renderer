@@ -7,19 +7,40 @@ enum Background: Int32 {
 
 struct RelativisticRenderer: Renderer {
     struct Configuration: Default {
-        var cameraPosition: SIMD3<Float>
-        var cameraRay: SIMD3<Float>
-        var background: Background
+        var cameraX: Float
+        var cameraY: Float
+        var cameraZ: Float
+        var cameraPitch: Float
+        var cameraYaw: Float
+        var background: Int32
         var stepCount: Int32
         var maxRevolutions: Int32
+        var accretionDiskStart: Float
+        var accretionDiskEnd: Float
         var renderAccretionDisk: Bool
         
+        var cameraPosition: SIMD3<Float> {
+            get {
+                SIMD3(cameraX, cameraY, cameraZ)
+            }
+            set {
+                cameraX = newValue.x
+                cameraY = newValue.y
+                cameraZ = newValue.z
+            }
+        }
+        
         static let `default` = Self(
-            cameraPosition: SIMD3(0, -1, -20),
-            cameraRay: SIMD3(0, 0, 0),
-            background: .starMap,
-            stepCount: 100,
+            cameraX: 0,
+            cameraY: 0,
+            cameraZ: -5,
+            cameraPitch: 0,
+            cameraYaw: 0,
+            background: Background.starMap.rawValue,
+            stepCount: 30,
             maxRevolutions: 1,
+            accretionDiskStart: 1.5,
+            accretionDiskEnd: 3.0,
             renderAccretionDisk: true
         )
     }

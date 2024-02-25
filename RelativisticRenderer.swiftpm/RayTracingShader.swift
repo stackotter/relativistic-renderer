@@ -72,11 +72,16 @@ let rayTracingShaderSource =
     } Background;
     
     typedef struct {
-        float3 cameraPosition;
-        float3 cameraRay;
+        float cameraX;
+        float cameraY;
+        float cameraZ;
+        float cameraPitch;
+        float cameraYaw;
         Background background;
         int stepCount;
         int maxRevolutions;
+        float accretionDiskStart;
+        float accretionDiskEnd;
         uint8_t renderAccretionDisk;
     } Configuration;
 
@@ -91,18 +96,28 @@ let rayTracingShaderSource =
         // A ray from the camera representing the direction that light must come from to
         // contribute to the current pixel (we trace this ray backwards).
         float3 cartesianRay = float3(
-            ((float)gid.x - textureWidth/2) / textureWidth * 2,
-            ((float)gid.y - textureHeight/2) / textureWidth * 2,
+            (float(gid.x) - textureWidth/2) / textureWidth * 2,
+            -(float(gid.y) - textureHeight/2) / textureWidth * 2,
             1
         );
-
-        // TODO: Make these configurable or physically accurate
-        float accretionDiskStart = 1.5;
-        float accretionDiskEnd = 3.0;
+    
+        float pitch = config.cameraPitch;
+        float3x3 rotX = float3x3(
+            { 1.0, 0.0, 0.0 },
+            { 0.0, cos(pitch), sin(pitch) },
+            { 0.0, -sin(pitch), cos(pitch) }
+        );
+        float yaw = config.cameraYaw;
+        float3x3 rotY = float3x3(
+            { cos(yaw), 0.0, sin(yaw) },
+            { 0.0, 1.0, 0.0 },
+            { -sin(yaw), 0.0, cos(yaw) }
+        );
+        cartesianRay = rotY * rotX * cartesianRay;
 
         // We rotate our coordinate system based on the initial velocity and the position of the mass
         // so that the ray travels in the xz-plane.
-        float3 position = config.cameraPosition;
+        float3 position = float3(config.cameraX, config.cameraY, config.cameraZ);
         float3 xBasis = normalize(position);
         float3 unitRay = normalize(cartesianRay);
         // A vector perpendicular to xBasis and in the same plane as xBasis and unitRay
@@ -140,8 +155,8 @@ let rayTracingShaderSource =
                 // and current positions so that we can easily perform an intersection.
                 float lerpFactor = abs(previousPosition.y) / abs(previousPosition.y - position.y);
                 float r = length(mix(previousPosition, position, lerpFactor));
-                if (r > accretionDiskStart && r < accretionDiskEnd) {
-                    float factor = (r - accretionDiskStart) / (accretionDiskEnd - accretionDiskStart);
+                if (r > config.accretionDiskStart && r < config.accretionDiskEnd) {
+                    float factor = (r - config.accretionDiskStart) / (config.accretionDiskEnd - config.accretionDiskStart);
                     float3 emittedColor = blackBodyRadiation(mix(4000, 1000, factor));
                     outTexture.write(float4(emittedColor, 1), gid);
                     return;

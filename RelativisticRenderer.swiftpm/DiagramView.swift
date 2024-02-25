@@ -67,16 +67,12 @@ struct DiagramView: View {
 
     @State var scale: CGFloat = 30
     @State var offset: CGPoint = CGPoint(x: Self.lineWidth, y: Self.lineWidth)
-    @State var timeStepMagnitude: CGFloat = 1
     @State var steps = 1000
+    @State var maxRevolutions = 3
     @State var blackHoleMass: CGFloat = 0.5
     
     @State var currentObserverPosition = CGPoint(x: 10, y: 15)
     @GestureState var observerDragDistance = CGSize.zero
-    
-    var timeStep: CGFloat {
-        pow(10, timeStepMagnitude)
-    }
     
     var observerPosition: CGPoint {
         return currentObserverPosition + observerDragDistance
@@ -100,7 +96,7 @@ struct DiagramView: View {
                                 initialVelocity: velocity,
                                 massPosition: Self.blackHolePosition,
                                 mass: blackHoleMass,
-                                timeStep: timeStep,
+                                maxRevolutions: maxRevolutions,
                                 steps: steps
                             ))
                         }
@@ -144,11 +140,8 @@ struct DiagramView: View {
             }
             
             ConfigOverlay {
-                Text("Blackhole mass: \(blackHoleMass) (arbitrary units)")
-                Slider(value: $blackHoleMass, in: 0.01...100)
-                
-                Text("Time step: \(timeStep)")
-                Slider(value: $timeStepMagnitude, in: -2...3)
+                Text("Max revolutions: \(maxRevolutions)")
+                Slider(value: $maxRevolutions.into(), in: 1...10)
                 
                 Text("Steps: \(steps)")
                 Slider(value: $steps.into(), in: 1...10000)
@@ -161,7 +154,7 @@ struct DiagramView: View {
         initialVelocity: CGPoint,
         massPosition: CGPoint,
         mass: CGFloat,
-        timeStep: CGFloat,
+        maxRevolutions: Int,
         steps: Int
     ) -> [CGPoint] {
         var points: [CGPoint] = [initialPosition]
@@ -169,7 +162,6 @@ struct DiagramView: View {
 
         let schwarzschildRadius = 2 * g * mass / (c * c)
         var u = 1 / polarPosition.radius
-        let u0 = u
         var xBasis = polarPosition.cartesian
         xBasis /= xBasis.magnitude
         var yBasis = CGPoint(x: -xBasis.y, y: xBasis.x)
@@ -179,24 +171,19 @@ struct DiagramView: View {
             yBasis *= -1
         }
         var du = -dot(ray, xBasis) / dot(ray, yBasis) * u
-        let du0 = du
         var phi: CGFloat = 0
         
         var position: CGPoint = polarPosition.cartesian
         var previousPosition = position
-        for _ in 0..<steps {
-            // TODO: Make this configurable
-            let maxRevolutions: CGFloat = 10
-            var step = maxRevolutions * 2 * .pi / CGFloat(steps)
+        for i in 0..<steps {
+            var step = CGFloat(maxRevolutions) * 2 * .pi / CGFloat(steps)
             
-            // Prevents us from stepping into the blackhole
-            // TODO: Understand and customise this
-            let maxUStepRatio = (1 - log(u)) * 10 / CGFloat(steps)
-            if (du > 0 || (du0 < 0 && u0 / u < 5)) && abs(du) > abs(maxUStepRatio * u) / step {
-                step = maxUStepRatio * u / abs(du)
+            // Prevents us from stepping across the event horizon
+            if du > 0 {
+                let maxStep = (1 / schwarzschildRadius - u) / du
+                step = min(step, maxStep)
             }
 
-            // TODO: Update this differential equation to account for blackhole mass
             u += du * step
             let ddu = -u * (1 - 6 * mass * mass * u * u)
             du += ddu * step
@@ -205,8 +192,18 @@ struct DiagramView: View {
             if u < 0 {
                 // The ray has shot off to infinity, extend it an arbitrarily large amount and stop
                 let step: CGFloat = 10000
-                let velocity = position - previousPosition
+                
+                // If this condition is met on the first step, then it means the ray is basically
+                // travelling directly away from the black hole's center of mass. That's useful
+                // because on the first step we don't have a previous step to extrapolate from.
+                let velocity = if i == 0 {
+                    position
+                } else {
+                    position - previousPosition
+                }
+                
                 points.append(position + velocity / velocity.magnitude * step + massPosition)
+                print("point", position + velocity / velocity.magnitude * step + massPosition, "i", i, "position", position, "velocity", velocity)
                 break
             }
 

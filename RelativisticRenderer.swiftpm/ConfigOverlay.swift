@@ -12,7 +12,7 @@ struct ConfigOverlay<Child: View>: View {
                 }
                 .padding(16)
                 .background(.black.opacity(0.6))
-                .frame(width: 600)
+                .frame(width: 400)
 
                 Spacer()
             }
