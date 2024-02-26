@@ -2,28 +2,29 @@ import SwiftUI
 
 // TODO: Implement precise positioning UI (so that users can position the observer more precisely
 struct DiagramView: View {
-    static let lineWidth: CGFloat = 2
-    static let g: CGFloat = 1
-    static let c: CGFloat = 1
-    static let blackHolePosition = CGPoint(x: 26, y: 15)
+    static var lineWidth: CGFloat { 2 }
+    static var g: CGFloat { 1 }
+    static var c: CGFloat { 1 }
+    static var blackHolePosition: CGPoint { CGPoint(x: 26, y: 15) }
 
     @State var scale: CGFloat = 30
     @State var offset: CGPoint = CGPoint(x: Self.lineWidth, y: Self.lineWidth)
     @State var steps = 1000
     @State var maxRevolutions = 3
-    @State var blackHoleMass: CGFloat = 0.5
+    @State var precisePositioning = false
     
     @State var currentObserverPosition = CGPoint(x: 10, y: 15)
     @GestureState var observerDragDistance = CGSize.zero
+    
+    var tab: Binding<ContentView.Tab>?
     
     var observerPosition: CGPoint {
         return currentObserverPosition + observerDragDistance
     }
     
-    /// The radius within which nothing can escape, not even light.
-    var schwarzschildRadius: CGFloat {
-        2 * Self.g * blackHoleMass / (Self.c * Self.c)
-    }
+    /// The radius within which nothing can escape, not even light. The chosen coordinate system
+    /// means that this is simply 1 for our blackhole.
+    static var schwarzschildRadius: CGFloat { 1 }
     
     var body: some View {
         NavigationSplitView {
@@ -33,6 +34,8 @@ struct DiagramView: View {
                 
                 Text("Steps: \(steps)")
                 Slider(value: $steps.into(), in: 1...10000)
+                
+                Toggle("Precise positioning", isOn: $precisePositioning)
             }
         } detail: {
             ZStack {
@@ -46,7 +49,6 @@ struct DiagramView: View {
                                     initialPosition: observerPosition,
                                     initialVelocity: velocity,
                                     massPosition: Self.blackHolePosition,
-                                    mass: blackHoleMass,
                                     maxRevolutions: maxRevolutions,
                                     steps: steps
                                 ))
@@ -55,7 +57,7 @@ struct DiagramView: View {
                         .stroke(Color.yellow, style: StrokeStyle(lineWidth: Self.lineWidth))
                         
                         Diagram(scale: scale, offset: offset) { builder in
-                            builder.addCircle(center: Self.blackHolePosition, radius: schwarzschildRadius)
+                            builder.addCircle(center: Self.blackHolePosition, radius: Self.schwarzschildRadius)
                         }
                         .stroke(Color.white, style: StrokeStyle(lineWidth: Self.lineWidth))
                     }
@@ -65,7 +67,17 @@ struct DiagramView: View {
                 .clipped()
                 .modifier(GestureModifier(offset: $offset, scale: $scale))
                 
-               
+                flashlight
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Picker("Tab", selection: tab ?? Binding { ContentView.Tab._2d } set: { _ in }) {
+                        Text("2d").tag(ContentView.Tab._2d)
+                        Text("3d").tag(ContentView.Tab._3d)
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .disabled(tab == nil)
+                }
             }
         }
     }
@@ -78,7 +90,8 @@ struct DiagramView: View {
                     .gesture(
                         DragGesture(coordinateSpace: CoordinateSpace.global)
                             .map { value in
-                                value.translation / scale
+                                let sensitivity = precisePositioning ? 0.2 : 1
+                                return value.translation / scale * sensitivity
                             }
                             .updating($observerDragDistance) { value, state, _ in
                                 state = value
@@ -102,14 +115,12 @@ struct DiagramView: View {
         initialPosition: CGPoint,
         initialVelocity: CGPoint,
         massPosition: CGPoint,
-        mass: CGFloat,
         maxRevolutions: Int,
         steps: Int
     ) -> [CGPoint] {
         var points: [CGPoint] = [initialPosition]
         let polarPosition = (initialPosition - massPosition).polar
 
-        let schwarzschildRadius = 2 * g * mass / (c * c)
         var u = 1 / polarPosition.radius
         var xBasis = polarPosition.cartesian
         xBasis /= xBasis.magnitude
@@ -121,6 +132,11 @@ struct DiagramView: View {
         }
         var du = -dot(ray, xBasis) / dot(ray, yBasis) * u
         var phi: CGFloat = 0
+        
+        // Don't start ray tracing if we're inside the event horizon already
+        if u > 1 / schwarzschildRadius {
+            return points
+        }
         
         var position: CGPoint = polarPosition.cartesian
         var previousPosition = position
@@ -134,7 +150,7 @@ struct DiagramView: View {
             }
 
             u += du * step
-            let ddu = -u * (1 - 6 * mass * mass * u * u)
+            let ddu = -u * (1 - 1.5 * u * u)
             du += ddu * step
             phi += step
 

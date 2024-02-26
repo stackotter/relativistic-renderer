@@ -8,12 +8,16 @@ struct RenderView: View {
     @State var distance: CGFloat = 8
     @State var minPhi: Float = -.pi / 2
     
+    var tab: Binding<ContentView.Tab>?
+    
     var resources: RelativisticRenderer.Resources
     
     func updateCamera() {
         let radius = Float(distance)
         let phi = Float(-offset.y / 400)
-        // TODO: Make this more self explanatory
+        // `minPhi` is used to act as a 'tare' to limit the pitch to the range -90 degrees to 90 degrees.
+        // This could be avoided by creating a new gesture recognizer that knows about this range limit,
+        // but this is much simpler and allows us to reuse the same ugly UIKit code.
         minPhi = min(minPhi, phi)
         minPhi = max(minPhi, phi - .pi)
         let cameraPitch = phi - minPhi - .pi / 2
@@ -77,6 +81,16 @@ struct RenderView: View {
                 }
                 .onAppear {
                     updateCamera()
+                }
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Picker("Tab", selection: tab ?? Binding { ContentView.Tab._3d } set: { _ in }) {
+                            Text("2d").tag(ContentView.Tab._2d)
+                            Text("3d").tag(ContentView.Tab._3d)
+                        }
+                        .pickerStyle(SegmentedPickerStyle())
+                        .disabled(tab == nil)
+                    }
                 }
             }
         }

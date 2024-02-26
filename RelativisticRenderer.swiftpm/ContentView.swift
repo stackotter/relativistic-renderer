@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State var tab = Tab._3d
+    @State var tab = Tab._2d
     
     enum Tab: Hashable {
         case _2d
@@ -16,18 +16,19 @@ struct ContentView: View {
         } success: { resources in
             OnboardAndThen(resources: resources) {
                 TabView(selection: $tab) {
-                    DiagramView()
+                    DiagramView(tab: $tab)
                         .tabItem {
                             Text("2d")
                         }
                         .tag(Tab._2d)
                     
-                    RenderView(resources: resources)
+                    RenderView(tab: $tab, resources: resources)
                         .tabItem {
                             Text("3d")
                         }
                         .tag(Tab._3d)
                 }
+                .tabViewStyle(.page(indexDisplayMode: .never))
             }
         } failure: { error in
             Text("Failed to load resources: \(error.localizedDescription)")

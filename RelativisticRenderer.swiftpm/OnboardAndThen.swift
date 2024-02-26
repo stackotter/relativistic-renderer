@@ -105,14 +105,16 @@ struct OnboardAndThen<Child: View>: View {
                         .clipShape(RoundedRectangle(cornerSize: CGSize(width: 8, height: 8)))
                         .opacity(titleOpacity)
                         .onAppear {
-                            withAnimation(.easeInOut(duration: 1).delay(1)) {
+                            withAnimation(.easeInOut(duration: 1).delay(0.5)) {
                                 titleOpacity = 1
                             }
                         }
                     } else {
                         VStack(alignment: .leading) {
-                            VStack(alignment: .leading) {
-                                introduction
+                            ScrollView {
+                                VStack(alignment: .leading) {
+                                    introduction
+                                }
                             }
                             Button("Next") {
                                 onboardingState = .onboarding(._2d)
@@ -128,7 +130,7 @@ struct OnboardAndThen<Child: View>: View {
                 }
             case ._2d:
                 ZStack {
-                    DiagramView()
+                    DiagramView(tab: nil)
                     
                     InstructionPanelOverlay(panel: instructionPanel2d) {
                         onboardingState = .onboarding(._3d)
@@ -136,7 +138,7 @@ struct OnboardAndThen<Child: View>: View {
                 }
             case ._3d:
                 ZStack {
-                    RenderView(resources: resources)
+                    RenderView(tab: nil, resources: resources)
                     
                     InstructionPanelOverlay(panel: instructionPanel3d) {
                         onboardingState = .done
