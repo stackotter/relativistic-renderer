@@ -21,9 +21,12 @@ make it only run once.
 Please note that much of the app was crammed pretty close to the deadline so there's definitely
 more that I could clean up.
 
+![A screenshot of the blackhole renderer's 3d view](screenshot.png)
+
 ## Notable inaccuracies
 
-- Doesn't consider the velocity of the observer (which may or may not affect the produced images)
+- Doesn't consider the velocity of the observer (which may or may not affect the produced images,
+  I'd need to investigate how significant the difference would be)
 - Doesn't simulate phenoma that affect the frequency of light, such as the relativistic doppler shift
   effect.
 - The accretion disk is only vaguely physically based (the gradient colouring is based on 
