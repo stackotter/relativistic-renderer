@@ -18,6 +18,7 @@ struct RelativisticRenderer: Renderer {
         var accretionDiskStart: Float
         var accretionDiskEnd: Float
         var renderAccretionDisk: Bool
+        var introEffect: Bool
         
         var cameraPosition: SIMD3<Float> {
             get {
@@ -41,16 +42,25 @@ struct RelativisticRenderer: Renderer {
             maxRevolutions: 1,
             accretionDiskStart: 1.5,
             accretionDiskEnd: 3.0,
-            renderAccretionDisk: true
+            renderAccretionDisk: true,
+            introEffect: false
         )
+        
+        func with<T>(_ keyPath: WritableKeyPath<Self, T>, _ value: T) -> Self {
+            var config = self
+            config[keyPath: keyPath] = value
+            return config
+        }
     }
     
     struct Resources {
         var computeLibrary: any MTLLibrary
+        var introEffectLibrary: any MTLLibrary
         var blitLibrary: any MTLLibrary
     }
 
     let computePipelineState: any MTLComputePipelineState
+    let introEffectPipelineState: any MTLComputePipelineState
     let blitPipelineState: any MTLRenderPipelineState
     var computeOutputTexture: (any MTLTexture)?
     let skyTexture: any MTLTexture
@@ -63,14 +73,17 @@ struct RelativisticRenderer: Renderer {
             throw SimpleError("Failed to create system default device")
         }
         let computeLibrary = try Self.compileMetalLibrary(device, source: rayTracingShaderSource)
+        let introEffectLibrary = try Self.compileMetalLibrary(device, source: introEffectShaderSource)
         let blitLibrary = try Self.compileMetalLibrary(device, source: blitShaderSource)
-        return Resources(computeLibrary: computeLibrary, blitLibrary: blitLibrary)
+        return Resources(computeLibrary: computeLibrary, introEffectLibrary: introEffectLibrary, blitLibrary: blitLibrary)
     }
     
     init(device: any MTLDevice, commandQueue: any MTLCommandQueue, resources: Resources) throws {
         let computeFunction = try Self.getFunction(resources.computeLibrary, name: "computeFunction")
         computePipelineState = try Self.makeComputePipelineState(device, function: computeFunction)
         
+        let introEffectFunction = try Self.getFunction(resources.introEffectLibrary, name: "computeFunction")
+        introEffectPipelineState = try Self.makeComputePipelineState(device, function: introEffectFunction)
         
         let blitVertexFunction = try Self.getFunction(resources.blitLibrary, name: "blitVertexFunction")
         let blitFragmentFunction = try Self.getFunction(resources.blitLibrary, name: "blitFragmentFunction")
@@ -118,7 +131,11 @@ struct RelativisticRenderer: Renderer {
         var configuration = configuration
         configBuffer.contents().copyMemory(from: &configuration, byteCount: MemoryLayout<Configuration>.stride)
 
-        computeEncoder.setComputePipelineState(computePipelineState)
+        if configuration.introEffect {
+            computeEncoder.setComputePipelineState(introEffectPipelineState)
+        } else {
+            computeEncoder.setComputePipelineState(computePipelineState)
+        }
         computeEncoder.setTexture(computeOutputTexture, index: 0)
         computeEncoder.setTexture(skyTexture, index: 1)
         computeEncoder.setBuffer(timeBuffer, offset: 0, index: 0)

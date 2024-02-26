@@ -16,7 +16,7 @@ let package = Package(
         .iOSApplication(
             name: "RelativisticRenderer",
             targets: ["AppModule"],
-            bundleIdentifier: "dev.stackotter.RelativisticRenderer",
+            bundleIdentifier: "dev.stackotter.RelativisticRenderer2",
             teamIdentifier: "2W73HS7DLT",
             displayVersion: "1.0",
             bundleVersion: "1",

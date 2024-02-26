@@ -26,7 +26,7 @@ struct DiagramView: View {
     }
     
     var body: some View {
-        NavigationSplitView(columnVisibility: .constant(.all)) {
+        NavigationSplitView {
             List {
                 Text("Max revolutions: \(maxRevolutions)")
                 Slider(value: $maxRevolutions.into(), in: 1...10)
@@ -68,6 +68,7 @@ struct DiagramView: View {
                 VStack(alignment: .leading) {
                     HStack {
                         Image(systemName: "flashlight.on.fill")
+                            .contentShape(Rectangle())
                             .gesture(
                                 DragGesture(coordinateSpace: CoordinateSpace.global)
                                     .map { value in

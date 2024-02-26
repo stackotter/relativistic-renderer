@@ -30,7 +30,41 @@ struct RenderView: View {
             Text(error)
                 .font(.system(size: 12).monospaced())
         } else {
-            ZStack {
+            NavigationSplitView {
+                List {
+                    Section("Environment") {
+                        Picker(selection: $rendererConfig.background) {
+                            Text("Star map")
+                                .tag(Background.starMap.rawValue)
+                            Text("Checker board")
+                                .tag(Background.checkerBoard.rawValue)
+                        } label: {
+                            Text("Background")
+                        }
+                    }
+                    
+                    Section("Accretion disk") {
+                        Toggle(isOn: $rendererConfig.renderAccretionDisk) {
+                            Text("Render accretion disk")
+                        }
+                        
+                        ConfigSlider("Accretion disk start", value: $rendererConfig.accretionDiskStart, in: 1...rendererConfig.accretionDiskEnd)
+                            .disabled(!rendererConfig.renderAccretionDisk)
+                        
+                        ConfigSlider("Accretion disk end", value: $rendererConfig.accretionDiskEnd, in: rendererConfig.accretionDiskStart...10)
+                            .disabled(!rendererConfig.renderAccretionDisk)
+                    }
+                    
+                    Section("Observer") {
+                        ConfigSlider("Distance from blackhole", value: $distance, in: 1...100)
+                    }
+                    
+                    Section("Raytracing") {
+                        ConfigSlider("Step count", value: $rendererConfig.stepCount.into(), in: 1...1000)
+                        ConfigSlider("Max revolutions", value: $rendererConfig.maxRevolutions.into(), in: 1...10)
+                    }
+                }
+            } detail: {
                 MetalView(error: $error, configuration: rendererConfig) {
                     try RenderCoordinator<RelativisticRenderer>.create(with: resources)
                 }
@@ -44,43 +78,7 @@ struct RenderView: View {
                 .onAppear {
                     updateCamera()
                 }
-                
-                ConfigOverlay {
-                    HStack {
-                        Text("Background")
-                        Picker(selection: $rendererConfig.background) {
-                            Text("Star map")
-                                .tag(Background.starMap.rawValue)
-                            Text("Checker board")
-                                .tag(Background.checkerBoard.rawValue)
-                        } label: {
-                            Text("Background")
-                        }
-                    }
-                    
-                    Spacer().frame(height: 48)
-
-                    Toggle(isOn: $rendererConfig.renderAccretionDisk) {
-                        Text("Render accretion disk")
-                    }
-
-                    ConfigSlider("Accretion disk start", value: $rendererConfig.accretionDiskStart, in: 1...rendererConfig.accretionDiskEnd)
-                        .disabled(!rendererConfig.renderAccretionDisk)
-
-                    ConfigSlider("Accretion disk end", value: $rendererConfig.accretionDiskEnd, in: rendererConfig.accretionDiskStart...10)
-                        .disabled(!rendererConfig.renderAccretionDisk)
-                    
-                    Spacer().frame(height: 48)
-
-                    ConfigSlider("Distance", value: $distance, in: 1...100)
-                    
-                    Spacer().frame(height: 48)
-
-                    ConfigSlider("Step count", value: $rendererConfig.stepCount.into(), in: 1...1000)
-                    ConfigSlider("Max revolutions", value: $rendererConfig.maxRevolutions.into(), in: 1...10)
-                }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }
