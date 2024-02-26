@@ -8,19 +8,19 @@ import PackageDescription
 import AppleProductTypes
 
 let package = Package(
-    name: "RelativisticRenderer",
+    name: "BlackholePlayground",
     platforms: [
         .iOS("16.0")
     ],
     products: [
         .iOSApplication(
-            name: "RelativisticRenderer",
+            name: "BlackholePlayground",
             targets: ["AppModule"],
-            bundleIdentifier: "dev.stackotter.RelativisticRenderer2",
+            bundleIdentifier: "dev.stackotter.BlackholeRenderer",
             teamIdentifier: "2W73HS7DLT",
             displayVersion: "1.0",
             bundleVersion: "1",
-            appIcon: .placeholder(icon: .cloud),
+            appIcon: .asset("AppIcon"),
             accentColor: .presetColor(.blue),
             supportedDeviceFamilies: [
                 .pad,
