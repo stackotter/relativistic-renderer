@@ -116,7 +116,7 @@ struct RenderView: View {
                             rendererConfig.stepCount = 0
                         }
                     }
-                Text("Steps: \(rendererConfig.stepCount)")
+                Text("Steps: \(steps)")
                 Slider(
                     value: Binding {
                         log10(CGFloat(rendererConfig.stepCount))
