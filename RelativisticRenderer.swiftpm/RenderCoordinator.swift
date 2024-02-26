@@ -20,7 +20,7 @@ final class RenderCoordinator<ConcreteRenderer: Renderer>: NSObject, MetalViewCo
         self.configuration = configuration
     }
     
-    static func create() throws -> RenderCoordinator {
+    static func create(with resources: ConcreteRenderer.Resources) throws -> RenderCoordinator {
         guard let device = MTLCreateSystemDefaultDevice() else {
             throw SimpleError("Failed to get default Metal device")
         }
@@ -31,7 +31,11 @@ final class RenderCoordinator<ConcreteRenderer: Renderer>: NSObject, MetalViewCo
         
         let renderer: ConcreteRenderer
         do {
-            renderer = try ConcreteRenderer(device: device, commandQueue: commandQueue)
+            renderer = try ConcreteRenderer(
+                device: device,
+                commandQueue: commandQueue,
+                resources: resources
+            )
         } catch {
             throw SimpleError("Failed to create renderer: \(error)")
         }
@@ -91,7 +95,8 @@ protocol Default {
 
 protocol Renderer {
     associatedtype Configuration: Default
-    init(device: MTLDevice, commandQueue: MTLCommandQueue) throws
+    associatedtype Resources
+    init(device: MTLDevice, commandQueue: MTLCommandQueue, resources: Resources) throws
     mutating func render(
         view: MTKView,
         configuration: Configuration,

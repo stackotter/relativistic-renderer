@@ -44,6 +44,11 @@ struct RelativisticRenderer: Renderer {
             renderAccretionDisk: true
         )
     }
+    
+    struct Resources {
+        var computeLibrary: any MTLLibrary
+        var blitLibrary: any MTLLibrary
+    }
 
     let computePipelineState: any MTLComputePipelineState
     let blitPipelineState: any MTLRenderPipelineState
@@ -53,14 +58,22 @@ struct RelativisticRenderer: Renderer {
     let initialTime: CFAbsoluteTime
     let configBuffer: any MTLBuffer
     
-    init(device: any MTLDevice, commandQueue: any MTLCommandQueue) throws {
-        let library = try Self.compileMetalLibrary(device, source: rayTracingShaderSource)
-        let computeFunction = try Self.getFunction(library, name: "computeFunction")
+    static func loadResources() async throws -> Resources {
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            throw SimpleError("Failed to create system default device")
+        }
+        let computeLibrary = try Self.compileMetalLibrary(device, source: rayTracingShaderSource)
+        let blitLibrary = try Self.compileMetalLibrary(device, source: blitShaderSource)
+        return Resources(computeLibrary: computeLibrary, blitLibrary: blitLibrary)
+    }
+    
+    init(device: any MTLDevice, commandQueue: any MTLCommandQueue, resources: Resources) throws {
+        let computeFunction = try Self.getFunction(resources.computeLibrary, name: "computeFunction")
         computePipelineState = try Self.makeComputePipelineState(device, function: computeFunction)
         
-        let blitLibrary = try Self.compileMetalLibrary(device, source: blitShaderSource)
-        let blitVertexFunction = try Self.getFunction(blitLibrary, name: "blitVertexFunction")
-        let blitFragmentFunction = try Self.getFunction(blitLibrary, name: "blitFragmentFunction")
+        
+        let blitVertexFunction = try Self.getFunction(resources.blitLibrary, name: "blitVertexFunction")
+        let blitFragmentFunction = try Self.getFunction(resources.blitLibrary, name: "blitFragmentFunction")
         
         blitPipelineState = try Self.makeRenderPipelineState(
             device,

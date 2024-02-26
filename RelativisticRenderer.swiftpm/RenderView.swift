@@ -8,6 +8,8 @@ struct RenderView: View {
     @State var distance: CGFloat = 8
     @State var minPhi: Float = -.pi / 2
     
+    var resources: RelativisticRenderer.Resources
+    
     func updateCamera() {
         let radius = Float(distance)
         let phi = Float(-offset.y / 400)
@@ -30,7 +32,7 @@ struct RenderView: View {
         } else {
             ZStack {
                 MetalView(error: $error, configuration: rendererConfig) {
-                    try RenderCoordinator<RelativisticRenderer>.create()
+                    try RenderCoordinator<RelativisticRenderer>.create(with: resources)
                 }
                 .overlay(GestureCatcher(offset: $offset, scale: $scale))
                 .onChange(of: offset) { _ in

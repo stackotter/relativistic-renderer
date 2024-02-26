@@ -10,6 +10,7 @@ import SwiftUI
 // TODO: Maybe bloom?
 // TODO: Make the accretion disk off axis perhaps?
 // TODO: Make gravity's effect on light toggleable
+// TODO: Fix clip shape of torch
 
 @main
 struct MyApp: App {

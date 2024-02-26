@@ -1,63 +1,5 @@
 import SwiftUI
 
-struct DiagramBuilder {
-    var path: Path
-    var scale: CGFloat
-    var offset: CGPoint
-    
-    mutating func addLine(_ points: [CGPoint]) {
-        guard let firstPoint = points.first else {
-            return
-        }
-        let transformedPoint = firstPoint * scale + offset
-        path.move(to: transformedPoint)
-        for point in points[1...] {
-            let transformedPoint = point * scale + offset
-            // `Path` starts acting weird if points get too far out of frame (perhaps some sort of culling algorithm
-            // gets confused.
-            if transformedPoint.magnitude > 1000000 {
-                break
-            }
-            path.addLine(to: transformedPoint)
-        }
-    }
-
-    mutating func addCircle(center: CGPoint, radius: CGFloat) {
-        path.move(to: (center + CGPoint(x: radius, y: 0)) * scale + offset)
-        path.addArc(
-            center: center * scale + offset,
-            radius: radius * scale,
-            startAngle: .zero,
-            endAngle: .radians(2 * .pi),
-            clockwise: true
-        )
-    }
-}
-
-struct Diagram: View {
-    var scale: CGFloat
-    var offset: CGPoint
-    var buildDiagram: (inout DiagramBuilder) -> Void
-    var color = Color.white
-    var strokeStyle = StrokeStyle()
-    
-    var body: some View {
-        Path { path in
-            var builder = DiagramBuilder(path: path, scale: scale, offset: offset)
-            buildDiagram(&builder)
-            path = builder.path
-        }
-        .stroke(color, style: strokeStyle)
-    }
-    
-    func stroke(_ color: Color, style: StrokeStyle) -> Self {
-        var diagram = self
-        diagram.color = color
-        diagram.strokeStyle = style
-        return diagram
-    }
-}
-
 // TODO: Implement precise positioning UI (so that users can position the observer more precisely
 struct DiagramView: View {
     static let lineWidth: CGFloat = 2
@@ -84,67 +26,69 @@ struct DiagramView: View {
     }
     
     var body: some View {
-        ZStack {
-            GeometryReader { geometry in
-                ZStack {
-                    Diagram(scale: scale, offset: offset) { builder in
-                        for i in 0...10 {
-                            let radians = -CGFloat.pi / 4 * CGFloat(i) / 10 + .pi / 8
-                            let velocity = CGPoint(x: Self.c * cos(radians), y: Self.c * sin(radians))
-                            builder.addLine(Self.trajectory(
-                                initialPosition: observerPosition,
-                                initialVelocity: velocity,
-                                massPosition: Self.blackHolePosition,
-                                mass: blackHoleMass,
-                                maxRevolutions: maxRevolutions,
-                                steps: steps
-                            ))
-                        }
-                    }
-                    .stroke(Color.yellow, style: StrokeStyle(lineWidth: Self.lineWidth))
-                    
-                    Diagram(scale: scale, offset: offset) { builder in
-                        builder.addCircle(center: Self.blackHolePosition, radius: schwarzschildRadius)
-                    }
-                    .stroke(Color.white, style: StrokeStyle(lineWidth: Self.lineWidth))
-                }
-            }
-            .contentShape(Rectangle())
-            .background(Color.black)
-            .clipped()
-            .modifier(GestureModifier(offset: $offset, scale: $scale))
-            
-            VStack(alignment: .leading) {
-                HStack {
-                    Image(systemName: "flashlight.on.fill")
-                        .gesture(
-                            DragGesture(coordinateSpace: CoordinateSpace.global)
-                                .map { value in
-                                    value.translation / scale
-                                }
-                                .updating($observerDragDistance) { value, state, _ in
-                                    state = value
-                                }
-                                .onEnded { value in
-                                    currentObserverPosition += value
-                                }
-                        )
-                        .rotationEffect(.radians(.pi / 2))
-                        .scaleEffect(3)
-                        .offset(x: -32, y: -10)
-                        .offset(x: (observerPosition.x) * scale + offset.x, y: (observerPosition.y) * scale + offset.y)
-                        .foregroundColor(.white)
-                    Spacer()
-                }
-                Spacer()
-            }
-            
-            ConfigOverlay {
+        NavigationSplitView(columnVisibility: .constant(.all)) {
+            List {
                 Text("Max revolutions: \(maxRevolutions)")
                 Slider(value: $maxRevolutions.into(), in: 1...10)
                 
                 Text("Steps: \(steps)")
                 Slider(value: $steps.into(), in: 1...10000)
+            }
+        } detail: {
+            ZStack {
+                GeometryReader { geometry in
+                    ZStack {
+                        Diagram(scale: scale, offset: offset) { builder in
+                            for i in 0...10 {
+                                let radians = -CGFloat.pi / 4 * CGFloat(i) / 10 + .pi / 8
+                                let velocity = CGPoint(x: Self.c * cos(radians), y: Self.c * sin(radians))
+                                builder.addLine(Self.trajectory(
+                                    initialPosition: observerPosition,
+                                    initialVelocity: velocity,
+                                    massPosition: Self.blackHolePosition,
+                                    mass: blackHoleMass,
+                                    maxRevolutions: maxRevolutions,
+                                    steps: steps
+                                ))
+                            }
+                        }
+                        .stroke(Color.yellow, style: StrokeStyle(lineWidth: Self.lineWidth))
+                        
+                        Diagram(scale: scale, offset: offset) { builder in
+                            builder.addCircle(center: Self.blackHolePosition, radius: schwarzschildRadius)
+                        }
+                        .stroke(Color.white, style: StrokeStyle(lineWidth: Self.lineWidth))
+                    }
+                }
+                .contentShape(Rectangle())
+                .background(Color.black)
+                .clipped()
+                .modifier(GestureModifier(offset: $offset, scale: $scale))
+                
+                VStack(alignment: .leading) {
+                    HStack {
+                        Image(systemName: "flashlight.on.fill")
+                            .gesture(
+                                DragGesture(coordinateSpace: CoordinateSpace.global)
+                                    .map { value in
+                                        value.translation / scale
+                                    }
+                                    .updating($observerDragDistance) { value, state, _ in
+                                        state = value
+                                    }
+                                    .onEnded { value in
+                                        currentObserverPosition += value
+                                    }
+                            )
+                            .rotationEffect(.radians(.pi / 2))
+                            .scaleEffect(3)
+                            .offset(x: -32, y: -10)
+                            .offset(x: (observerPosition.x) * scale + offset.x, y: (observerPosition.y) * scale + offset.y)
+                            .foregroundColor(.white)
+                        Spacer()
+                    }
+                    Spacer()
+                }
             }
         }
     }
@@ -203,7 +147,6 @@ struct DiagramView: View {
                 }
                 
                 points.append(position + velocity / velocity.magnitude * step + massPosition)
-                print("point", position + velocity / velocity.magnitude * step + massPosition, "i", i, "position", position, "velocity", velocity)
                 break
             }
 
