@@ -116,10 +116,11 @@ struct OnboardAndThen<Child: View>: View {
                                     introduction
                                 }
                             }
+                            .padding(.bottom, 16)
                             Button("Next") {
                                 onboardingState = .onboarding(._2d)
                             }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.bordered)
                         }
                         .padding()
                         .frame(maxWidth: 600)

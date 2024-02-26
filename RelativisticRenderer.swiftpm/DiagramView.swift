@@ -1,6 +1,7 @@
 import SwiftUI
 
-// TODO: Implement precise positioning UI (so that users can position the observer more precisely
+/// A 2d diagram of light bending around a blackhole. Allows the light source to be moved around and
+/// the simulation to be configured (e.g. by changing granularity).
 struct DiagramView: View {
     static var lineWidth: CGFloat { 2 }
     static var g: CGFloat { 1 }
@@ -9,12 +10,16 @@ struct DiagramView: View {
 
     @State var scale: CGFloat = 30
     @State var offset: CGPoint = CGPoint(x: Self.lineWidth, y: Self.lineWidth)
-    @State var steps = 1000
+    @State var stepsMagnitude: CGFloat = 3
     @State var maxRevolutions = 3
     @State var precisePositioning = false
     
     @State var currentObserverPosition = CGPoint(x: 10, y: 15)
     @GestureState var observerDragDistance = CGSize.zero
+    
+    var steps: Int {
+        Int(pow(10, stepsMagnitude))
+    }
     
     var tab: Binding<ContentView.Tab>?
     
@@ -28,15 +33,7 @@ struct DiagramView: View {
     
     var body: some View {
         NavigationSplitView {
-            List {
-                Text("Max revolutions: \(maxRevolutions)")
-                Slider(value: $maxRevolutions.into(), in: 1...10)
-                
-                Text("Steps: \(steps)")
-                Slider(value: $steps.into(), in: 1...10000)
-                
-                Toggle("Precise positioning", isOn: $precisePositioning)
-            }
+            configPanel
         } detail: {
             ZStack {
                 GeometryReader { geometry in
@@ -79,6 +76,22 @@ struct DiagramView: View {
                     .disabled(tab == nil)
                 }
             }
+        }
+    }
+    
+    var configPanel: some View {
+        List {
+            Text("Max revolutions: \(maxRevolutions)")
+            Slider(value: $maxRevolutions.into(), in: 1...10)
+            
+            Text("Steps: \(steps)")
+            Slider(value: $stepsMagnitude, in: 0...4)
+                .onChange(of: stepsMagnitude) { _ in
+                    // Click the steps to logarithmic increments
+                    stepsMagnitude = log10(CGFloat(steps))
+                }
+            
+            Toggle("Precise positioning", isOn: $precisePositioning)
         }
     }
     
