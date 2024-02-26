@@ -12,7 +12,7 @@ struct RenderView: View {
     @State var steps: Int = 30
     @State var renderWithGravity = true
     
-    var tab: Binding<ContentView.Tab>?
+    var tab: Binding<RootView.Tab>?
     
     var resources: RelativisticRenderer.Resources
     
@@ -56,9 +56,9 @@ struct RenderView: View {
                 }
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
-                        Picker("Tab", selection: tab ?? Binding { ContentView.Tab._3d } set: { _ in }) {
-                            Text("2d").tag(ContentView.Tab._2d)
-                            Text("3d").tag(ContentView.Tab._3d)
+                        Picker("Tab", selection: tab ?? Binding { RootView.Tab._3d } set: { _ in }) {
+                            Text("2d").tag(RootView.Tab._2d)
+                            Text("3d").tag(RootView.Tab._3d)
                         }
                         .pickerStyle(SegmentedPickerStyle())
                         .disabled(tab == nil)

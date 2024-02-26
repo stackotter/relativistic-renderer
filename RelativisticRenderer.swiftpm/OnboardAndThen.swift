@@ -25,14 +25,14 @@ struct OnboardAndThen<Child: View>: View {
                 title: "General relativity",
                 paragraphs: [
                     "Blackholes and the behaviour of other objects in their presence is best described by Einstein's Theory of General Relativity.",
-                    "Einstein's radical new way of describing gravity proposed that gravity isn't a force, it's the result of curvature in spacetime. The more massive an object, the more it curves spacetime.",
-                    "Einstein's equations are extremely difficult to solve in the general case, but a brilliant physicist Karl Schwarzschild found a solution that applies when you have a single spherical non-rotating mass. It's a simplification, but Schwarzschild's solution is widely applicable, especially when all other objects in a system are relatively small."
+                    "Einstein's radical new way of describing gravity proposed that gravity is the result of curvature in spacetime. The more massive an object, the more it curves spacetime.",
+                    "Einstein's equations are extremely difficult to solve in the general case, but the brilliant physicist Karl Schwarzschild found a solution that applies when you have a single spherical non-rotating mass. It's a simplification, but Schwarzschild's solution is accurate enough in many situations."
                 ]
             ),
             Introduction.Section(
                 title: "Light",
                 paragraphs: [
-                    "Light has famously been shown to act as both a particle and wave, but at the scales that General Relativity applies, we can just treat it as a particle - the photon.",
+                    "Light is famously both a particle and wave, but under General Relativity, we just treat it as a particle - the photon.",
                     "Photons have no mass, but they're still affected by the curvature of spacetime due to their momentum. This gives rise to the strange appearance of blackholes."
                 ]
             ),
@@ -42,7 +42,15 @@ struct OnboardAndThen<Child: View>: View {
             ),
             Introduction.Section(
                 title: "Accretion disks",
-                paragraphs: ["Blackholes often form extremely hot disks of gas that reach extreme temperatures and speeds. Contrary to how they may look, accretion disks truly are flat disks, but their light gets bent before it reaches your eyes and allows you to see the top and bottom of the disk at the same time."]
+                paragraphs: ["Blackholes often form extremely hot disks of gas that reach extreme temperatures and speeds. Contrary to how they may look, accretion disks truly are flat disks, but their light gets bent before it reaches your eyes allowing you to see the top and bottom of the disk at the same time."]
+            ),
+            Introduction.Section(
+                title: "Raytracing",
+                paragraphs: [
+                    "Raytracing is one of the two main ways that computers render scenes (the other being rasterization). Raytracing involves tracing the path of light (backwards) to figure out which colour of light could have reached a particular pixel of your virtual camera.",
+                    "Raytracers generally assume that light travels in straight lines, but as you now know, it doesn't always! The raytracer you'll see in the 3d view has been specifically designed to incorporate the effects of general relativity while tracing the path of light through the scene.",
+                    "You may notice that as you change the raytracing settings the camera seems to zoom in or out. This is due to the error increasing/decreasing as you change the granularity of the raytracer."
+                ]
             )
         ]
     )
@@ -53,7 +61,7 @@ struct OnboardAndThen<Child: View>: View {
             "The rays are traced by solving Schwarzschild's solution with a numerical integration method."
         ],
         legend: [
-            ("slider.horizontal.3", "Increase the number of steps to increase precision, and increase the maximum revolutions to increase the maximum number of times that light will be followed around the blackhole."),
+            ("slider.horizontal.3", "Use the sidebar to configure the number of raytracing steps, the number of times that light will get followed around the blackhole (for performance reasons), or access precision positioning mode."),
             ("arrow.up.and.down.and.arrow.left.and.right", "Drag the torch to move it"),
             ("arrow.up.and.down.and.arrow.left.and.right", "Drag anywhere else to move the camera"),
             ("arrow.down.left.and.arrow.up.right", "Pinch to zoom")
@@ -62,9 +70,7 @@ struct OnboardAndThen<Child: View>: View {
     
     let instructionPanel3d = InstructionPanel(
         paragraphs: [
-            "In 3d view you can move around a blackhole and observe how the blackhole's extreme gravity magnifies, and warps objects behind the blackhole, even allowing you to see parts of the accretion disk that would be hidden by the blackhole if not for light bending.",
-            "For every pixel, a compute shader shoots a ray into the scene and computes a path similar to those you've seen in the 2d view, and figures out where light would have to come from to hit that pixel. If a ray reaches the event horizon, the pixel is black because no light would ever be able to reach the observer from within the event horizon.",
-            "You may notice that as you change the raytracing settings the camera seems to zoom in or out. This is due to the error increasing/decreasing as you change the granularity of the raytracer."
+            "In 3d view you can move around a blackhole and observe how the blackhole's extreme gravity magnifies, and warps objects behind the blackhole, even allowing you to see parts of the accretion disk that would be hidden by the blackhole if not for light bending. If you look closely you can see multiple copies of stars as they pass behind the blackhole."
         ],
         legend: [
             ("slider.horizontal.3", "Configure the environment and raytracer in the sidebar"),
@@ -131,7 +137,7 @@ struct OnboardAndThen<Child: View>: View {
                 }
             case ._2d:
                 ZStack {
-                    DiagramView(tab: nil)
+                    DiagramView(tab: nil, offset: CGPoint(x: -200, y: -250))
                     
                     InstructionPanelOverlay(panel: instructionPanel2d) {
                         onboardingState = .onboarding(._3d)

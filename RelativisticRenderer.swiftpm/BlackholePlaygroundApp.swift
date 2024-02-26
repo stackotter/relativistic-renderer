@@ -1,12 +1,12 @@
 import SwiftUI
 
-// TODO: Implement intuitive 3d movement controls
+// TODO: Explain raytracing
 
 @main
 struct BlackholePlaygroundApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
         }
     }
 }

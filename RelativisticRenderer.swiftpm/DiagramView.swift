@@ -9,10 +9,10 @@ struct DiagramView: View {
     static var blackHolePosition: CGPoint { CGPoint(x: 26, y: 15) }
 
     @State var scale: CGFloat = 30
-    @State var offset: CGPoint = CGPoint(x: Self.lineWidth, y: Self.lineWidth)
     @State var stepsMagnitude: CGFloat = 3
     @State var maxRevolutions = 3
     @State var precisePositioning = false
+    @State var offset: CGPoint
     
     @State var currentObserverPosition = CGPoint(x: 10, y: 15)
     @GestureState var observerDragDistance = CGSize.zero
@@ -21,7 +21,12 @@ struct DiagramView: View {
         Int(pow(10, stepsMagnitude))
     }
     
-    var tab: Binding<ContentView.Tab>?
+    var tab: Binding<RootView.Tab>?
+    
+    init(tab: Binding<RootView.Tab>?, offset: CGPoint? = nil) {
+        self.tab = tab
+        self.offset = offset ?? .zero
+    }
     
     var observerPosition: CGPoint {
         return currentObserverPosition + observerDragDistance
@@ -68,9 +73,9 @@ struct DiagramView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Picker("Tab", selection: tab ?? Binding { ContentView.Tab._2d } set: { _ in }) {
-                        Text("2d").tag(ContentView.Tab._2d)
-                        Text("3d").tag(ContentView.Tab._3d)
+                    Picker("Tab", selection: tab ?? Binding { RootView.Tab._2d } set: { _ in }) {
+                        Text("2d").tag(RootView.Tab._2d)
+                        Text("3d").tag(RootView.Tab._3d)
                     }
                     .pickerStyle(SegmentedPickerStyle())
                     .disabled(tab == nil)
