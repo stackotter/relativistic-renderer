@@ -9,6 +9,8 @@ struct RenderView: View {
     @State var scale: CGFloat = 1
     @State var distance: CGFloat = 8
     @State var minPhi: Float = -.pi / 2
+    @State var steps: Int = 30
+    @State var renderWithGravity = true
     
     var tab: Binding<ContentView.Tab>?
     
@@ -85,7 +87,7 @@ struct RenderView: View {
                 }
                 
                 ConfigSlider("Accretion disk start", value: $rendererConfig.accretionDiskStart, in: 1...10)
-                    .onChange(of: rendererConfig.accretionDiskStart) { value in
+                    .onChange(of: rendererConfig.accretionDiskStart) { _ in
                         if rendererConfig.accretionDiskStart > rendererConfig.accretionDiskEnd {
                             rendererConfig.accretionDiskStart = rendererConfig.accretionDiskEnd
                         }
@@ -93,7 +95,7 @@ struct RenderView: View {
                     .disabled(!rendererConfig.renderAccretionDisk)
                 
                 ConfigSlider("Accretion disk end", value: $rendererConfig.accretionDiskEnd, in: 1...10)
-                    .onChange(of: rendererConfig.accretionDiskEnd) { value in
+                    .onChange(of: rendererConfig.accretionDiskEnd) { _ in
                         if rendererConfig.accretionDiskEnd < rendererConfig.accretionDiskStart {
                             rendererConfig.accretionDiskEnd = rendererConfig.accretionDiskStart
                         }
@@ -106,16 +108,27 @@ struct RenderView: View {
             }
             
             Section("Raytracing") {
+                Toggle("Gravity", isOn: $renderWithGravity)
+                    .onChange(of: renderWithGravity) { _ in
+                        if renderWithGravity {
+                            rendererConfig.stepCount = Int32(steps)
+                        } else {
+                            rendererConfig.stepCount = 0
+                        }
+                    }
                 Text("Steps: \(rendererConfig.stepCount)")
                 Slider(
                     value: Binding {
                         log10(CGFloat(rendererConfig.stepCount))
                     } set: { newValue in
                         rendererConfig.stepCount = Int32(pow(10, newValue))
+                        steps = Int(rendererConfig.stepCount)
                     },
                     in: 0...3
                 )
+                    .disabled(!renderWithGravity)
                 ConfigSlider("Max revolutions", value: $rendererConfig.maxRevolutions.into(), in: 1...10)
+                    .disabled(!renderWithGravity)
             }
         }
     }

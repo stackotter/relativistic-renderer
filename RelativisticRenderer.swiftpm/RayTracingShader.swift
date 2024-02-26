@@ -83,6 +83,7 @@ let rayTracingShaderSource =
         float accretionDiskStart;
         float accretionDiskEnd;
         uint8_t renderAccretionDisk;
+        uint8_t introEffect; // Ignored by shader
     } Configuration;
 
     kernel void computeFunction(uint2 gid [[thread_position_in_grid]],
@@ -172,7 +173,26 @@ let rayTracingShaderSource =
         if (1.0 / u < schwarzschildRadius ) {
             color = float4(0, 0, 0, 1) * (1 - color.a) + color * color.a;
         } else {
-            float3 ray = position - previousPosition;
+            float3 ray;
+            // If the stepCount is 0 then gravity has been disabled.
+            if (config.stepCount == 0) {
+                ray = unitRay;
+                if (config.renderAccretionDisk && sign(position.y) != sign(ray.y)) {
+                    // We assume that the photon is travelling in a straight line between the previous
+                    // and current positions so that we can easily perform an intersection.
+                    float k = abs(position.y / ray.y);
+                    float r = length(position + ray * k);
+                    if (r > config.accretionDiskStart && r < config.accretionDiskEnd) {
+                        float factor = (r - config.accretionDiskStart) / (config.accretionDiskEnd - config.accretionDiskStart);
+                        float3 emittedColor = blackBodyRadiation(mix(4000, 1000, factor));
+                        outTexture.write(float4(emittedColor, 1), gid);
+                        return;
+                    }
+                }
+            } else {
+                ray = position - previousPosition;
+            }
+
             float2 uv = float2(
                 atan2(ray.z, ray.x) / (2 * M_PI_F) + 0.5 + time * 0.01,
                 atan2(ray.y, length(ray.xz)) / M_PI_F + 0.5
