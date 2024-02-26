@@ -3,13 +3,13 @@ import MetalKit
 final class RenderCoordinator<ConcreteRenderer: Renderer>: NSObject, MetalViewCoordinator {
     typealias Configuration = ConcreteRenderer.Configuration
 
-    let device: any MTLDevice
+    let device: MetalDevice
     let commandQueue: any MTLCommandQueue
     var renderer: ConcreteRenderer
     var configuration: ConcreteRenderer.Configuration
     
     init(
-        device: any MTLDevice,
+        device: MetalDevice,
         commandQueue: any MTLCommandQueue,
         renderer: ConcreteRenderer,
         configuration: Configuration
@@ -21,11 +21,9 @@ final class RenderCoordinator<ConcreteRenderer: Renderer>: NSObject, MetalViewCo
     }
     
     static func create(with resources: ConcreteRenderer.Resources) throws -> RenderCoordinator {
-        guard let device = MTLCreateSystemDefaultDevice() else {
-            throw SimpleError("Failed to get default Metal device")
-        }
+        let device = try MetalDevice.systemDefault()
         
-        guard let commandQueue = device.makeCommandQueue() else {
+        guard let commandQueue = device.wrappedDevice.makeCommandQueue() else {
             throw SimpleError("Failed to make Metal command queue")
         }
         
@@ -53,7 +51,7 @@ final class RenderCoordinator<ConcreteRenderer: Renderer>: NSObject, MetalViewCo
     func setup(_ view: MTKView) {
         view.colorPixelFormat = .bgra8Unorm
         view.clearColor = MTLClearColorMake(0, 1, 0, 1)
-        view.device = device
+        view.device = device.wrappedDevice
         view.drawableSize = view.frame.size
         view.framebufferOnly = false
     }
@@ -83,7 +81,6 @@ final class RenderCoordinator<ConcreteRenderer: Renderer>: NSObject, MetalViewCo
                 commandBuffer: commandBuffer
             )
         } catch {
-            // TODO: Handle errors that occur while rendering frames
             print("Failed to render frame: \(error)")
         }
     }
@@ -96,11 +93,11 @@ protocol Default {
 protocol Renderer {
     associatedtype Configuration: Default
     associatedtype Resources
-    init(device: MTLDevice, commandQueue: MTLCommandQueue, resources: Resources) throws
+    init(device: MetalDevice, commandQueue: MTLCommandQueue, resources: Resources) throws
     mutating func render(
         view: MTKView,
         configuration: Configuration,
-        device: any MTLDevice,
+        device: MetalDevice,
         renderPassDescriptor: MTLRenderPassDescriptor,
         drawable: any MTLDrawable,
         commandBuffer: any MTLCommandBuffer

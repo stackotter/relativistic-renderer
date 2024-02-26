@@ -65,32 +65,36 @@ struct DiagramView: View {
                 .clipped()
                 .modifier(GestureModifier(offset: $offset, scale: $scale))
                 
-                VStack(alignment: .leading) {
-                    HStack {
-                        Image(systemName: "flashlight.on.fill")
-                            .contentShape(Rectangle())
-                            .gesture(
-                                DragGesture(coordinateSpace: CoordinateSpace.global)
-                                    .map { value in
-                                        value.translation / scale
-                                    }
-                                    .updating($observerDragDistance) { value, state, _ in
-                                        state = value
-                                    }
-                                    .onEnded { value in
-                                        currentObserverPosition += value
-                                    }
-                            )
-                            .rotationEffect(.radians(.pi / 2))
-                            .scaleEffect(3)
-                            .offset(x: -32, y: -10)
-                            .offset(x: (observerPosition.x) * scale + offset.x, y: (observerPosition.y) * scale + offset.y)
-                            .foregroundColor(.white)
-                        Spacer()
-                    }
-                    Spacer()
-                }
+               
             }
+        }
+    }
+    
+    var flashlight: some View {
+        VStack(alignment: .leading) {
+            HStack {
+                Image(systemName: "flashlight.on.fill")
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(coordinateSpace: CoordinateSpace.global)
+                            .map { value in
+                                value.translation / scale
+                            }
+                            .updating($observerDragDistance) { value, state, _ in
+                                state = value
+                            }
+                            .onEnded { value in
+                                currentObserverPosition += value
+                            }
+                    )
+                    .rotationEffect(.radians(.pi / 2))
+                    .scaleEffect(3)
+                    .offset(x: -32, y: -10)
+                    .offset(x: (observerPosition.x) * scale + offset.x, y: (observerPosition.y) * scale + offset.y)
+                    .foregroundColor(.white)
+                Spacer()
+            }
+            Spacer()
         }
     }
     

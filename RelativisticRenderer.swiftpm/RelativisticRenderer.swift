@@ -54,9 +54,9 @@ struct RelativisticRenderer: Renderer {
     }
     
     struct Resources {
-        var computeLibrary: any MTLLibrary
-        var introEffectLibrary: any MTLLibrary
-        var blitLibrary: any MTLLibrary
+        var computeLibrary: MetalLibrary
+        var introEffectLibrary: MetalLibrary
+        var blitLibrary: MetalLibrary
     }
 
     let computePipelineState: any MTLComputePipelineState
@@ -64,72 +64,62 @@ struct RelativisticRenderer: Renderer {
     let blitPipelineState: any MTLRenderPipelineState
     var computeOutputTexture: (any MTLTexture)?
     let skyTexture: any MTLTexture
-    let timeBuffer: any MTLBuffer
+    let timeBuffer: MetalScalarBuffer<Float>
     let initialTime: CFAbsoluteTime
-    let configBuffer: any MTLBuffer
+    let configBuffer: MetalScalarBuffer<Configuration>
     
     static func loadResources() async throws -> Resources {
-        guard let device = MTLCreateSystemDefaultDevice() else {
-            throw SimpleError("Failed to create system default device")
-        }
-        let computeLibrary = try Self.compileMetalLibrary(device, source: rayTracingShaderSource)
-        let introEffectLibrary = try Self.compileMetalLibrary(device, source: introEffectShaderSource)
-        let blitLibrary = try Self.compileMetalLibrary(device, source: blitShaderSource)
+        let device = try MetalDevice.systemDefault()
+        let computeLibrary = try device.compileMetalLibrary(source: rayTracingShaderSource)
+        let introEffectLibrary = try device.compileMetalLibrary(source: introEffectShaderSource)
+        let blitLibrary = try device.compileMetalLibrary(source: blitShaderSource)
         return Resources(computeLibrary: computeLibrary, introEffectLibrary: introEffectLibrary, blitLibrary: blitLibrary)
     }
     
-    init(device: any MTLDevice, commandQueue: any MTLCommandQueue, resources: Resources) throws {
-        let computeFunction = try Self.getFunction(resources.computeLibrary, name: "computeFunction")
-        computePipelineState = try Self.makeComputePipelineState(device, function: computeFunction)
+    init(device: MetalDevice, commandQueue: any MTLCommandQueue, resources: Resources) throws {
+        let computeFunction = try resources.computeLibrary.getFunction(name: "computeFunction")
+        computePipelineState = try device.makeComputePipelineState(function: computeFunction)
         
-        let introEffectFunction = try Self.getFunction(resources.introEffectLibrary, name: "computeFunction")
-        introEffectPipelineState = try Self.makeComputePipelineState(device, function: introEffectFunction)
+        let introEffectFunction = try resources.introEffectLibrary.getFunction(name: "computeFunction")
+        introEffectPipelineState = try device.makeComputePipelineState(function: introEffectFunction)
         
-        let blitVertexFunction = try Self.getFunction(resources.blitLibrary, name: "blitVertexFunction")
-        let blitFragmentFunction = try Self.getFunction(resources.blitLibrary, name: "blitFragmentFunction")
+        let blitVertexFunction = try resources.blitLibrary.getFunction(name: "blitVertexFunction")
+        let blitFragmentFunction = try resources.blitLibrary.getFunction(name: "blitFragmentFunction")
         
-        blitPipelineState = try Self.makeRenderPipelineState(
-            device,
+        blitPipelineState = try device.makeRenderPipelineState(
             vertexFunction: blitVertexFunction,
             fragmentFunction: blitFragmentFunction
         )
 
         do {
-            skyTexture = try MTKTextureLoader(device: device).newTexture(name: "starmap_2020_4k", scaleFactor: 1, bundle: Bundle.main)
+            skyTexture = try MTKTextureLoader(device: device.wrappedDevice).newTexture(name: "starmap_2020_4k", scaleFactor: 1, bundle: Bundle.main)
         } catch {
             throw SimpleError("Failed to load sky texture: \(error)")
         }
         
-        guard let timeBuffer = device.makeBuffer(length: MemoryLayout<Float>.stride) else {
-            throw SimpleError("Failed to create time buffer")
-        }
-        self.timeBuffer = timeBuffer
+        timeBuffer = try device.makeScalarBuffer()
         initialTime = CFAbsoluteTimeGetCurrent()
         
-        guard let configBuffer = device.makeBuffer(length: MemoryLayout<Configuration>.stride) else {
-            throw SimpleError("Failed to create config buffer")
-        }
-        self.configBuffer = configBuffer
+        configBuffer = try device.makeScalarBuffer()
     }
     
     mutating func render(
         view: MTKView,
         configuration: Configuration,
-        device: MTLDevice,
+        device: MetalDevice,
         renderPassDescriptor: MTLRenderPassDescriptor,
         drawable: MTLDrawable,
         commandBuffer: MTLCommandBuffer
     ) throws {
-        let computeOutputTexture = try updateOutputTexture(device, view)
+        let computeOutputTexture = try updateOutputTexture(device.wrappedDevice, view)
         
         guard let computeEncoder = commandBuffer.makeComputeCommandEncoder() else {
             throw SimpleError("Failed to make compute command encoder")
         }
         
-        var time = Float(CFAbsoluteTimeGetCurrent() - initialTime)
-        timeBuffer.contents().copyMemory(from: &time, byteCount: MemoryLayout<Float>.stride)
-        var configuration = configuration
-        configBuffer.contents().copyMemory(from: &configuration, byteCount: MemoryLayout<Configuration>.stride)
+        let time = Float(CFAbsoluteTimeGetCurrent() - initialTime)
+        timeBuffer.copyMemory(from: time)
+        configBuffer.copyMemory(from: configuration)
 
         if configuration.introEffect {
             computeEncoder.setComputePipelineState(introEffectPipelineState)
@@ -138,8 +128,8 @@ struct RelativisticRenderer: Renderer {
         }
         computeEncoder.setTexture(computeOutputTexture, index: 0)
         computeEncoder.setTexture(skyTexture, index: 1)
-        computeEncoder.setBuffer(timeBuffer, offset: 0, index: 0)
-        computeEncoder.setBuffer(configBuffer, offset: 0, index: 1)
+        computeEncoder.setBuffer(timeBuffer.wrappedBuffer, offset: 0, index: 0)
+        computeEncoder.setBuffer(configBuffer.wrappedBuffer, offset: 0, index: 1)
         computeEncoder.dispatchThreadgroups(
             MTLSize(width: Int(view.drawableSize.width + 15) / 16, height: Int(view.drawableSize.height + 15) / 16, depth: 1),
             threadsPerThreadgroup: MTLSize(width: 16, height: 16, depth: 1)
@@ -179,47 +169,5 @@ struct RelativisticRenderer: Renderer {
         }
         
         return computeOutputTexture
-    }
-    
-    // TODO: Move these to a Metal util/wrapper/extension
-    static func compileMetalLibrary(_ device: any MTLDevice, source: String) throws -> any MTLLibrary {
-        let options = MTLCompileOptions()
-        do {
-            return try device.makeLibrary(source: source, options: options)
-        } catch {
-            throw SimpleError("Failed to compile shaders: \(error)")
-        }
-    }
-    
-    static func getFunction(_ library: any MTLLibrary, name: String) throws -> any MTLFunction {
-        guard let function = library.makeFunction(name: name) else {
-            throw SimpleError("Failed to get function '\(name)'")
-        }
-        return function
-    }
-    
-    static func makeComputePipelineState(_ device: any MTLDevice, function: any MTLFunction) throws -> any MTLComputePipelineState {
-        do {
-            return try device.makeComputePipelineState(function: function)
-        } catch {
-            throw SimpleError("Failed to make compute pipeline state: \(error)")
-        }
-    }
-    
-    static func makeRenderPipelineState(
-        _ device: any MTLDevice,
-        vertexFunction: any MTLFunction,
-        fragmentFunction: any MTLFunction
-    ) throws -> any MTLRenderPipelineState {
-        let pipelineDescriptor = MTLRenderPipelineDescriptor()
-        pipelineDescriptor.vertexFunction = vertexFunction
-        pipelineDescriptor.fragmentFunction = fragmentFunction
-        pipelineDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
-        
-        do {
-            return try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
-        } catch {
-            throw SimpleError("Failed to make pipeline state: \(error)")
-        }
     }
 }
